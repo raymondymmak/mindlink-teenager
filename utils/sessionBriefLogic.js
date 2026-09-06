@@ -189,11 +189,12 @@ function summarizeMood(trajectory) {
   const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
   const min = Math.min(...scores);
   const max = Math.max(...scores);
-  let trend = "Stable across recorded days.";
+  let trend = "Only one self-rated day so far.";
   if (scores.length >= 2) {
     const delta = scores[scores.length - 1] - scores[0];
     if (delta <= -2) trend = "Downward across recorded days.";
     else if (delta >= 2) trend = "Upward across recorded days.";
+    else trend = "Stable across recorded days.";
   }
   return {
     count: scores.length,
@@ -251,10 +252,21 @@ function extractThemes(entries = [], textItems = []) {
     lonely: "Loneliness / isolation",
   };
   const fromTags = tags.map((tag) => themeLabels[tag] || `#${tag}`);
+  const tagSignalIds = {
+    school: "school",
+    family: "family",
+    friends: "peers",
+    anxiety: "anxiety",
+    lonely: "low_mood",
+  };
+  const coveredSignals = new Set(
+    tags.map((tag) => tagSignalIds[tag]).filter(Boolean)
+  );
   const fromSignals = extractObservationalSignals(textItems)
     .filter((signal) =>
       ["school", "family", "peers", "anxiety", "low_mood"].includes(signal.id)
     )
+    .filter((signal) => !coveredSignals.has(signal.id))
     .map((signal) => signal.label);
   const themes = uniqueStrings([...fromTags, ...fromSignals]);
   return themes.slice(0, 5);
@@ -344,7 +356,7 @@ function analyzeLocalSignals({
   const criticalQuote = extractCriticalQuote(textItems);
   const observationalSignals = extractObservationalSignals(textItems);
 
-  return {
+  const draft = {
     userName,
     generatedAt: new Date().toISOString(),
     dataSources: {
@@ -364,6 +376,8 @@ function analyzeLocalSignals({
       .slice(-6)
       .map((item) => `${item.date || "undated"} (${item.source}): ${item.text}`),
   };
+  draft.openingQuestions = buildOpeningQuestions(draft);
+  return draft;
 }
 
 function buildOpeningQuestions(analysis) {
@@ -390,46 +404,25 @@ function buildOpeningQuestions(analysis) {
 }
 
 function buildMockSessionBrief(analysis, { reason } = {}) {
-  const { moodSummary, themes, correlations, criticalQuote, observationalSignals } =
-    analysis;
-  const themeLine =
-    themes.length > 0 ? themes.map((theme) => `- ${theme}`).join("\n") : "- Not enough tagged or repeated topics yet.";
-  const signalLine =
-    observationalSignals.length > 0
-      ? observationalSignals
-          .map(
-            (signal) =>
-              `- ${signal.label} (mentioned in ${signal.sources.join(", ")}; ${signal.mentionCount} match${signal.mentionCount === 1 ? "" : "es"})`
-          )
-          .join("\n")
-      : "- No PHQ-adjacent phrases were detected in the stored user text.";
-  const quoteLine = criticalQuote.quote
-    ? `"${criticalQuote.quote}"`
-    : "No user quote was long enough to extract.";
-  const questions = buildOpeningQuestions(analysis)
+  const { moodSummary, themes, correlations, criticalQuote } = analysis;
+  const themeText =
+    themes.length > 0 ? themes.join("; ") : "no repeated themes yet";
+  const quoteText = criticalQuote.quote
+    ? `They wrote: "${criticalQuote.quote}"`
+    : "No longer user quote was available.";
+  const questions = (analysis.openingQuestions || buildOpeningQuestions(analysis))
     .map((question) => `- ${question}`)
     .join("\n");
   const moodLine =
     moodSummary.count > 0
       ? `Self-rated journal mood across ${moodSummary.count} day(s): average ${moodSummary.average}/10 (range ${moodSummary.min}–${moodSummary.max}). ${moodSummary.trend}`
-      : "No journal mood scores are stored yet. Trajectory is based on check-in text only.";
+      : "No journal mood scores are stored yet.";
 
   return [
-    `## Mood trajectory`,
+    `${analysis.userName || "The teen"} has ${analysis.dataSources.diaryEntries} journal day(s), ${analysis.dataSources.checkIns} check-in(s), and ${analysis.dataSources.chatReports} chat report(s) on this device.`,
     moodLine,
-    "",
-    `## Recurring themes`,
-    themeLine,
-    "",
-    `## Stressors on lower-mood days`,
-    correlations.summary,
-    "",
-    `## Notable quote`,
-    quoteLine,
-    "",
-    `## Observational signals from user-reported text`,
-    "These are keyword matches from journal/check-in wording, not a PHQ-9 or other scored instrument.",
-    signalLine,
+    `Themes that stand out: ${themeText}. ${correlations.summary}`,
+    quoteText,
     "",
     `## Suggested opening questions`,
     questions,
@@ -442,18 +435,62 @@ function buildMockSessionBrief(analysis, { reason } = {}) {
 
 function formatSessionBriefMarkdown(analysis, narrative) {
   const sources = analysis.dataSources || {};
-  const header = [
+  const moodLines =
+    (analysis.moodTrajectory || []).length > 0
+      ? analysis.moodTrajectory
+          .map((item) => `- ${item.date}: ${item.mood}/10`)
+          .join("\n")
+      : "- No journal mood scores available.";
+  const themeLines =
+    (analysis.themes || []).length > 0
+      ? analysis.themes.map((theme) => `- ${theme}`).join("\n")
+      : "- Not enough tagged or repeated topics yet.";
+  const signalLines =
+    (analysis.observationalSignals || []).length > 0
+      ? analysis.observationalSignals
+          .map(
+            (signal) =>
+              `- ${signal.label} (mentioned in ${signal.sources.join(", ")}; ${signal.mentionCount} match${signal.mentionCount === 1 ? "" : "es"})`
+          )
+          .join("\n")
+      : "- No PHQ-adjacent phrases were detected in the stored user text.";
+  const quoteLine = analysis.criticalQuote?.quote
+    ? `"${analysis.criticalQuote.quote}"`
+    : "No user quote was long enough to extract.";
+
+  return [
     `# Session Brief`,
     `Preferred name: ${analysis.userName || "User"}`,
     `Generated: ${new Date(analysis.generatedAt || Date.now()).toLocaleString()}`,
     `Sources: ${sources.diaryEntries || 0} journal entries, ${sources.checkIns || 0} check-ins, ${sources.chatReports || 0} chat reports.`,
     "",
-    narrative.trim(),
+    `## Mood trajectory`,
+    moodLines,
+    analysis.moodSummary?.count
+      ? `Average ${analysis.moodSummary.average}/10 (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
+      : "",
+    "",
+    `## Recurring themes`,
+    themeLines,
+    "",
+    `## Stressors on lower-mood days`,
+    analysis.correlations?.summary || "Not available from on-device data.",
+    "",
+    `## Notable quote`,
+    quoteLine,
+    "",
+    `## Observational signals from user-reported text`,
+    "These are keyword matches from journal/check-in wording, not a PHQ-9 or other scored instrument.",
+    signalLines,
+    "",
+    `## Clinician notes`,
+    (narrative || "").trim(),
     "",
     `---`,
     `This brief is a synthesis of data the teen stored on this device. It is not a clinical assessment, diagnosis, or risk score.`,
-  ];
-  return header.join("\n");
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 }
 
 function hasEnoughBriefData({ entries = [], checkIns = [], summaries = [] }) {

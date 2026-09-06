@@ -21,6 +21,7 @@ const InsightScreen = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [brief, setBrief] = useState(null);
   const [error, setError] = useState("");
+  const [shareStatus, setShareStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -65,8 +66,14 @@ const InsightScreen = () => {
     }
   };
 
-  const handleShare = () => {
-    shareOrCopyText("MindLink Session Brief", brief?.markdown || "");
+  const handleShare = async () => {
+    const shared = await shareOrCopyText(
+      "MindLink Session Brief",
+      brief?.markdown || ""
+    );
+    setShareStatus(
+      shared ? "Brief copied or handed to the share sheet." : ""
+    );
   };
 
   if (isLoading && !brief) {
@@ -134,6 +141,9 @@ const InsightScreen = () => {
         >
           <Text style={styles.secondaryButtonText}>Copy / Share</Text>
         </TouchableOpacity>
+        {shareStatus ? (
+          <Text style={styles.shareStatus}>{shareStatus}</Text>
+        ) : null}
       </View>
 
       {error ? (
@@ -228,6 +238,21 @@ const InsightScreen = () => {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Suggested opening questions</Text>
+            {(analysis.openingQuestions || []).length > 0 ? (
+              analysis.openingQuestions.map((question) => (
+                <Text key={question} style={styles.sectionContent}>
+                  • {question}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.sectionContent}>
+                Generate a brief to get suggested openers.
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               Observational signals (user-reported)
             </Text>
@@ -252,10 +277,10 @@ const InsightScreen = () => {
         </>
       ) : null}
 
-      {brief?.markdown ? (
+      {brief?.narrative ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Clinician narrative</Text>
-          <Markdown style={markdownStyles}>{brief.markdown}</Markdown>
+          <Text style={styles.sectionTitle}>Clinician notes</Text>
+          <Markdown style={markdownStyles}>{brief.narrative}</Markdown>
         </View>
       ) : null}
     </ScrollView>
@@ -440,6 +465,11 @@ const styles = StyleSheet.create({
     color: "#666",
     marginBottom: 8,
     lineHeight: 18,
+  },
+  shareStatus: {
+    fontSize: 13,
+    color: "#2e7d32",
+    textAlign: "center",
   },
   quote: {
     fontSize: 16,

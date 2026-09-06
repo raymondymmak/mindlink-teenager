@@ -61,19 +61,21 @@ function testMoodAndTags() {
 
 function testMockBrief(analysis) {
   const narrative = buildMockSessionBrief(analysis, { reason: "unit test" });
-  assert.ok(narrative.includes("## Mood trajectory"));
-  assert.ok(narrative.includes("## Recurring themes"));
-  assert.ok(narrative.includes("## Stressors on lower-mood days"));
-  assert.ok(narrative.includes("## Notable quote"));
-  assert.ok(narrative.includes("Observational signals"));
   assert.ok(narrative.includes("Suggested opening questions"));
-  assert.ok(!/PHQ-9 score/i.test(narrative) || narrative.includes("not a PHQ-9"));
+  assert.ok(narrative.includes("Alex"));
   assert.ok(!/HAM-A|Hamilton/.test(narrative));
+  assert.ok((analysis.openingQuestions || []).length >= 2);
 
   const markdown = formatSessionBriefMarkdown(analysis, narrative);
   assert.ok(markdown.startsWith("# Session Brief"));
+  assert.ok(markdown.includes("## Mood trajectory"));
+  assert.ok(markdown.includes("## Recurring themes"));
+  assert.ok(markdown.includes("## Stressors on lower-mood days"));
+  assert.ok(markdown.includes("## Notable quote"));
+  assert.ok(markdown.includes("Observational signals"));
   assert.ok(markdown.includes("Preferred name: Alex"));
   assert.ok(markdown.includes("not a clinical assessment"));
+  assert.ok(!/HAM-A|Hamilton/.test(markdown));
 }
 
 function testEmptyState() {
