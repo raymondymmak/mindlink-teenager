@@ -4,7 +4,7 @@
   "terminals": [
     {
       "name": "expo-web",
-      "command": "EXPO_PUBLIC_GEMINI_API_KEY=\"${GEMINI_KEY:-}\" EXPO_PUBLIC_GEMINI_MODEL=\"${EXPO_PUBLIC_GEMINI_MODEL:-gemini-3.6-flash}\" EXPO_PUBLIC_CONTEXT_API_URL=\"${EXPO_PUBLIC_CONTEXT_API_URL:-https://gemini-middleman-zeta.vercel.app/api/context}\" npx expo start --web --port 8081"
+      "command": "EXPO_PUBLIC_GEMINI_API_KEY=\"${GEMINI_KEY:-}\" EXPO_PUBLIC_GEMINI_MODEL=\"${EXPO_PUBLIC_GEMINI_MODEL:-gemini-3.6-flash}\" npx expo start --web --port 8081"
     }
   ],
   "ports": [

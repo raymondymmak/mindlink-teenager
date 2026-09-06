@@ -1,22 +1,33 @@
-export const DEFAULT_CONTEXT_API_URL =
-  "https://gemini-middleman-zeta.vercel.app/api/context";
+export const SAME_ORIGIN_CONTEXT_PATH = "/api/context";
+export const PRODUCTION_CONTEXT_API_URL =
+  "https://raymondmak-app1.expo.app/api/context";
+export const DEFAULT_CONTEXT_API_URL = PRODUCTION_CONTEXT_API_URL;
 
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_QUERY_CHARS = 2000;
 
+function normalizeContextUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value === SAME_ORIGIN_CONTEXT_PATH || /\/api\/context\/?$/.test(value)) {
+    return value.replace(/\/$/, "") || SAME_ORIGIN_CONTEXT_PATH;
+  }
+  return `${value.replace(/\/$/, "")}${SAME_ORIGIN_CONTEXT_PATH}`;
+}
+
 /**
- * Resolve the middleman context endpoint.
- * Accepts a full `/api/context` URL or an origin; never reads Pinecone keys.
+ * Resolve this project's context endpoint.
+ * Web prefers same-origin `/api/context`. Never reads Pinecone keys.
  */
 export function getContextApiUrl() {
-  const raw = (
-    process.env.EXPO_PUBLIC_CONTEXT_API_URL || DEFAULT_CONTEXT_API_URL
-  ).trim();
-  if (!raw) return DEFAULT_CONTEXT_API_URL;
-  if (/\/api\/context\/?$/.test(raw)) {
-    return raw.replace(/\/$/, "");
+  const configured = normalizeContextUrl(
+    process.env.EXPO_PUBLIC_CONTEXT_API_URL || ""
+  );
+  if (configured) return configured;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${SAME_ORIGIN_CONTEXT_PATH}`;
   }
-  return `${raw.replace(/\/$/, "")}/api/context`;
+  return DEFAULT_CONTEXT_API_URL;
 }
 
 function extractMessageText(message) {
@@ -104,8 +115,8 @@ function emptyContextResult(extra = {}) {
 }
 
 /**
- * POST { query } to the middleman context API.
- * Returns empty context on any failure so Gemini can continue unaided.
+ * POST { query } to this project's /api/context (Pinecone stays server-side).
+ * Returns empty context on any failure so Gemini Flash can continue unaided.
  */
 export async function fetchClinicalContext(
   query,
@@ -124,9 +135,7 @@ export async function fetchClinicalContext(
     : null;
 
   try {
-    console.log(
-      `[contextApi] POST ${url} queryChars=${trimmed.length}`
-    );
+    console.log(`[contextApi] POST ${url} queryChars=${trimmed.length}`);
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
