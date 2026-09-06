@@ -53,12 +53,23 @@ This Expo 53 app reads:
 
 ```bash
 EXPO_PUBLIC_GEMINI_API_KEY=your_key_here
-EXPO_PUBLIC_GEMINI_MODEL=gemini-2.0-flash
+EXPO_PUBLIC_GEMINI_MODEL=gemini-3.6-flash
 ```
 
 1. Create a key in [Google AI Studio](https://aistudio.google.com/apikey).
 2. Copy `.env.example` to `.env` and paste the key.
 3. Restart Expo so the `EXPO_PUBLIC_*` value is inlined.
+
+Expo web only inlines `EXPO_PUBLIC_*` variables. For EAS Hosting, export the web bundle with the public key set from the Cursor secret (do not commit `.env`):
+
+```bash
+EXPO_PUBLIC_GEMINI_API_KEY="$GEMINI_KEY" \
+EXPO_PUBLIC_GEMINI_MODEL="${EXPO_PUBLIC_GEMINI_MODEL:-gemini-3.6-flash}" \
+  npx expo export -p web
+npx eas-cli deploy --prod --non-interactive
+```
+
+`gemini-2.0-flash` is no longer available. The default is `gemini-3.6-flash` (override with `EXPO_PUBLIC_GEMINI_MODEL`). If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
 
 The client prefers `@google/genai` and falls back to the official REST endpoint (`generativelanguage.googleapis.com`) if the SDK cannot run in React Native. Never hardcode the key in source.
 

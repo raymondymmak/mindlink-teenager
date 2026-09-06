@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+// Verified against Google AI Studio ListModels + generateContent (Sep 2026).
+// gemini-2.0-flash is retired; Google currently redirects new callers to this id.
+export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 const GEMINI_REST_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -8,6 +10,7 @@ export function getGeminiApiKey() {
   const key = (
     process.env.EXPO_PUBLIC_GEMINI_API_KEY ||
     process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_KEY ||
     ""
   ).trim();
   return key;
@@ -16,7 +19,7 @@ export function getGeminiApiKey() {
 export function getGeminiModel() {
   return (
     process.env.EXPO_PUBLIC_GEMINI_MODEL ||
-    DEFAULT_MODEL
+    DEFAULT_GEMINI_MODEL
   ).trim();
 }
 

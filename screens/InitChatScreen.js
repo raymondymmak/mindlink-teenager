@@ -20,7 +20,11 @@ import { SYSTEM_INSTRUCTION_INITIAL } from "../utils/systemInstruction";
 import { Button, Header } from "react-native-elements"; // Import Header component
 import * as FileSystem from "expo-file-system"; // Replace RNFS with FileSystem
 import { Asset } from "expo-asset";
-import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  generateGeminiText,
+  getGeminiModel,
+  isGeminiConfigured,
+} from "../utils/geminiClient";
 import { requestBriefGeneration, saveCheckIn } from "../utils/localData";
 
 const InitChatScreen = ({ navigation }) => {
@@ -172,7 +176,7 @@ const InitChatScreen = ({ navigation }) => {
     ttl
   ) => {
     const requestBody = {
-      model: "models/gemini-2.0-flash",
+      model: `models/${getGeminiModel()}`,
       contents: [
         {
           parts: [{ file_data: { mime_type: mimeType, file_uri: fileUri } }],
@@ -400,12 +404,17 @@ So, what do you want to talk about today? You can share anything on your mind, o
       }
     } catch (error) {
       console.error("API Error:", error);
+      const detail = error?.message ? ` (${error.message})` : "";
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString() + "-error",
           role: "model",
-          parts: [{ text: "Sorry, I encountered an error. Please try again." }],
+          parts: [
+            {
+              text: `Gemini was unavailable${detail}. Live chat could not continue. You can still write a diary entry and generate an on-device Session Brief from Reports → Brief.`,
+            },
+          ],
         },
       ]);
     } finally {

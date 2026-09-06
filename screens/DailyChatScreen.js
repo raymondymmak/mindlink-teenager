@@ -299,7 +299,11 @@ const DailyChatScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      const detail = error?.message ? ` (${error.message})` : "";
+      Alert.alert(
+        "Gemini unavailable",
+        `Live chat could not continue${detail}. You can still write a diary entry and generate an on-device Session Brief from Reports → Brief.`
+      );
     } finally {
       setIsLoading(false);
     }
