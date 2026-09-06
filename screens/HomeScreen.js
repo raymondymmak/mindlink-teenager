@@ -16,6 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import { TabView, SceneMap, TabBar } from "react-native-tab-view";
 import Slider from "@react-native-community/slider";
+import { requestBriefGeneration } from "../utils/localData";
 
 const HomeScreen = ({ navigation }) => {
   const [diaryEntry, setDiaryEntry] = useState("");
@@ -373,11 +374,28 @@ const HomeScreen = ({ navigation }) => {
         await AsyncStorage.setItem("@last_diary_entry", content);
         await AsyncStorage.setItem("@last_diary_date", formattedDate);
       }
-      Alert.alert(
-        "Entry Saved",
-        "Your diary entry has been saved successfully.",
-        [{ text: "OK" }]
-      );
+      const goToBrief = async () => {
+        await requestBriefGeneration();
+        navigation.navigate("Reports", { openInsights: true });
+      };
+      if (Platform.OS === "web") {
+        if (
+          window.confirm(
+            "Entry saved. Generate a Session Brief for a clinician?"
+          )
+        ) {
+          await goToBrief();
+        }
+      } else {
+        Alert.alert(
+          "Entry Saved",
+          "Your diary entry has been saved. Generate a Session Brief for a clinician?",
+          [
+            { text: "Later", style: "cancel" },
+            { text: "Generate Brief", onPress: goToBrief },
+          ]
+        );
+      }
       setDiaryEntry(""); // Clear the input after saving
       setSelectedTags([]); // Clear tags
       setMoodValue(5); // Reset mood

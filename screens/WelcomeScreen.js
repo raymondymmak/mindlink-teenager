@@ -14,6 +14,7 @@ import {
   Keyboard
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isGeminiConfigured } from '../utils/geminiClient';
 
 // Import Helmet for web-specific meta tags
 import { Helmet } from 'react-helmet-async';
@@ -61,11 +62,11 @@ const WelcomeScreen = ({ navigation }) => {
       // Check if the initial chat is completed
       const initialChatCompleted = await AsyncStorage.getItem('@initial_chat_completed');
       
-      if (initialChatCompleted === 'true') {
-        // If initial chat is completed, go to MainApp (HomeScreen)
+      if (initialChatCompleted === 'true' || !isGeminiConfigured()) {
+        // Skip intro chat when it is already done, or when Gemini is not configured.
+        await AsyncStorage.setItem('@initial_chat_completed', 'true');
         navigation.navigate('MainApp');
       } else {
-        // If initial chat is not completed, go to ChatScreen
         navigation.navigate('Chat');
       }
     } catch (error) {
@@ -101,6 +102,11 @@ const WelcomeScreen = ({ navigation }) => {
           </TouchableWithoutFeedback>
           <View style={styles.bottomContainer}>
             <Text style={styles.label}>How do you want us to call you?</Text>
+            {!isGeminiConfigured() ? (
+              <Text style={styles.demoNote}>
+                Demo mode: no Gemini API key is set. You can journal and generate a local Session Brief. Add EXPO_PUBLIC_GEMINI_API_KEY to enable live chat.
+              </Text>
+            ) : null}
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.input}
@@ -177,6 +183,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  demoNote: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
   },
   input: {
     flex: 1,

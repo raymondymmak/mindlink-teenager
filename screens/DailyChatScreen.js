@@ -19,7 +19,14 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SYSTEM_INSTRUCTION from "../utils/systemInstruction";
 import { Button } from "react-native-elements";
-import * as FileSystem from "expo-file-system";
+import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  loadDailyChatMessages,
+  readStoredText,
+  requestBriefGeneration,
+  saveCheckIn,
+  saveDailyChatMessages,
+} from "../utils/localData";
 
 const DailyChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
@@ -82,11 +89,9 @@ const DailyChatScreen = ({ navigation }) => {
     // Load previous messages if any
     const loadMessages = async () => {
       try {
-        const savedMessages = await AsyncStorage.getItem(
-          "@daily_chat_messages"
-        );
-        if (savedMessages) {
-          setMessages(JSON.parse(savedMessages));
+        const savedMessages = await loadDailyChatMessages();
+        if (savedMessages && savedMessages.length > 0) {
+          setMessages(savedMessages);
         } else {
           // Show welcome message if no previous messages
           const initialMessage = {
@@ -111,6 +116,33 @@ const DailyChatScreen = ({ navigation }) => {
 
     loadMessages();
   }, [userName]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveDailyChatMessages(messages).catch((error) =>
+        console.error("Failed to persist daily chat:", error)
+      );
+    }
+  }, [messages]);
+
+  const startSessionBrief = async (currentMessages = messages) => {
+    try {
+      await saveCheckIn(currentMessages);
+      await requestBriefGeneration();
+      const cleanedMessages = currentMessages.map((msg) => ({
+        role: msg.user?._id === 1 ? "user" : "model",
+        parts: [{ text: msg.text }],
+      }));
+      navigation.navigate("Reports", {
+        cleanedMessages,
+        isInitialFlow: false,
+        openInsights: true,
+      });
+    } catch (error) {
+      console.error("Failed to start Session Brief:", error);
+      Alert.alert("Error", "Could not open Session Brief.");
+    }
+  };
 
   const checkCrisis = (text) => {
     const lower = text.toLowerCase();
@@ -161,14 +193,26 @@ const DailyChatScreen = ({ navigation }) => {
         },
       ];
 
-      // Fetch the latest report to include in the system instruction
+      if (!isGeminiConfigured()) {
+        const botMessage = {
+          _id: createUniqueId("bot"),
+          text: "Gemini is not configured on this device, so I can't continue the live chat. You can still write a diary entry and generate a Session Brief from the Reports → Brief tab.",
+          createdAt: new Date(),
+          user: {
+            _id: 2,
+            name: "MindLink",
+            avatar: require("../src/data/blank-profile-picture-png.webp"),
+          },
+        };
+        setMessages((previousMessages) => [...previousMessages, botMessage]);
+        return;
+      }
+
       let latestReport = "";
       try {
         const lastReportPath = await AsyncStorage.getItem("@last_report_path");
         if (lastReportPath) {
-          const reportContent = await FileSystem.readAsStringAsync(
-            lastReportPath
-          );
+          const reportContent = await readStoredText(lastReportPath);
           if (reportContent) {
             latestReport = `\n\nLatest User Report:\n${reportContent}`;
           }
@@ -177,30 +221,12 @@ const DailyChatScreen = ({ navigation }) => {
         console.error("Failed to load latest report:", err);
       }
 
-      // Make API call
-      const response = await fetch(
-        "https://gemini-middleman-zeta.vercel.app/api/chat/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: formattedContents,
-            systemInstruction: {
-              role: "user",
-              parts: [
-                {
-                  text: SYSTEM_INSTRUCTION + "\n\n\n" + userName + latestReport,
-                },
-              ],
-            },
-          }),
-        }
-      );
-
-      const data = await response.json();
-      const botResponse = (data.reply || "").trim();
+      const botResponse = (
+        await generateGeminiText({
+          contents: formattedContents,
+          systemInstruction: `${SYSTEM_INSTRUCTION}\n\n\n${userName}${latestReport}`,
+        })
+      ).trim();
 
       // Check for the end-of-conversation token
       if (botResponse.includes("[END_OF_CONVERSATION]")) {
@@ -230,39 +256,25 @@ const DailyChatScreen = ({ navigation }) => {
           if (Platform.OS === "web") {
             if (
               window.confirm(
-                "Would you like me to create your wellness report for today?"
+                "Create a Session Brief from today's check-in?"
               )
             ) {
               setMessages((currentMessages) => {
-                const cleanedMessages = currentMessages.map((msg) => ({
-                  role: msg.user._id === 1 ? "user" : "model",
-                  parts: [{ text: msg.text }],
-                }));
-                navigation.navigate("Reports", {
-                  cleanedMessages,
-                  isInitialFlow: false,
-                });
+                startSessionBrief(currentMessages);
                 return currentMessages;
               });
             }
           } else {
             Alert.alert(
-              "Ready to Summarize?",
-              "Would you like me to create your wellness report for today?",
+              "Create Session Brief?",
+              "Generate a clinician Session Brief from today's check-in?",
               [
                 { text: "Not Yet", style: "cancel" },
                 {
                   text: "Yes, Please",
                   onPress: () => {
                     setMessages((currentMessages) => {
-                      const cleanedMessages = currentMessages.map((msg) => ({
-                        role: msg.user._id === 1 ? "user" : "model",
-                        parts: [{ text: msg.text }],
-                      }));
-                      navigation.navigate("Reports", {
-                        cleanedMessages,
-                        isInitialFlow: false,
-                      });
+                      startSessionBrief(currentMessages);
                       return currentMessages;
                     });
                   },
@@ -496,6 +508,12 @@ const DailyChatScreen = ({ navigation }) => {
 
             {/* Input area with absolute positioning at bottom */}
             <View style={styles.inputContainer}>
+              <TouchableOpacity
+                style={styles.briefInlineButton}
+                onPress={() => startSessionBrief(messages)}
+              >
+                <Text style={styles.briefLinkText}>Brief</Text>
+              </TouchableOpacity>
               <TextInput
                 style={[
                   styles.input,
@@ -552,6 +570,12 @@ const DailyChatScreen = ({ navigation }) => {
                 }
               />
 
+              <TouchableOpacity
+                style={styles.briefLink}
+                onPress={() => startSessionBrief(messages)}
+              >
+                <Text style={styles.briefLinkText}>Create Session Brief</Text>
+              </TouchableOpacity>
               <View style={styles.mobileInputContainer}>
                 <TextInput
                   style={[
@@ -708,6 +732,20 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  briefLink: {
+    alignSelf: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  briefInlineButton: {
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  briefLinkText: {
+    color: "#007bff",
+    fontWeight: "600",
+    fontSize: 14,
   },
 });
 

@@ -13,13 +13,23 @@ import {
 } from "react-native";
 import { TabView, SceneMap, TabBar } from "react-native-tab-view";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
 import Markdown from "react-native-markdown-display";
-import SYSTEM_INSTRUCTION, {
+import {
   SYSTEM_INSTRUCTION_SUMMARY,
   SYSTEM_INSTRUCTION_POINTS,
 } from "../utils/systemInstruction";
 import InsightScreen from "./InsightScreen";
+import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  listSavedReports,
+  readStoredText,
+  saveChatReport,
+} from "../utils/localData";
+import {
+  buildLocalChatReport,
+  buildLocalKeyPoints,
+} from "../utils/sessionBriefLogic";
+import { shareOrCopyText } from "../utils/shareText";
 
 const SummaryScreen = ({ route, navigation }) => {
   const cleanedMessages = route.params?.cleanedMessages || [];
@@ -35,11 +45,12 @@ const SummaryScreen = ({ route, navigation }) => {
     { key: "general", title: "General" },
     { key: "today", title: "Today" },
     { key: "history", title: "History" },
-    { key: "insights", title: "Insights" },
+    { key: "insights", title: "Brief" },
   ]);
 
   // Check if this is part of the initial flow (called directly from ChatScreen)
   const isInitialFlow = route.params?.isInitialFlow;
+  const openInsights = route.params?.openInsights;
 
   // Fetch user name from AsyncStorage
   useEffect(() => {
@@ -57,6 +68,12 @@ const SummaryScreen = ({ route, navigation }) => {
     fetchUserName();
   }, []);
 
+  useEffect(() => {
+    if (openInsights) {
+      setIndex(3);
+    }
+  }, [openInsights]);
+
   // Check for existing reports
   useEffect(() => {
     const checkForReports = async () => {
@@ -71,17 +88,10 @@ const SummaryScreen = ({ route, navigation }) => {
           // Load the report content if we don't have messages from navigation
           if (cleanedMessages.length === 0) {
             try {
-              let reportContent = "";
-              if (Platform.OS === "web") {
-                reportContent =
-                  window.localStorage.getItem(lastReportPath) ||
-                  "Previously saved report could not be loaded.";
-              } else {
-                reportContent = await FileSystem.readAsStringAsync(
-                  lastReportPath
-                );
-              }
-              setSummary(reportContent);
+              const reportContent = await readStoredText(lastReportPath);
+              setSummary(
+                reportContent || "Previously saved report could not be loaded."
+              );
             } catch (err) {
               console.error("Failed to load report:", err);
               setSummary("Previously saved report could not be loaded.");
@@ -91,60 +101,12 @@ const SummaryScreen = ({ route, navigation }) => {
           }
         }
 
-        // Find all saved reports
-        const findSavedReports = async () => {
-          try {
-            let reportDetails = [];
-            if (Platform.OS === "web") {
-              // On web, scan localStorage keys
-              const files = Object.keys(window.localStorage).filter(
-                (key) => key.startsWith("userReport-") && key.endsWith(".txt")
-              );
-              reportDetails = files.map((file) => {
-                // Extract date from filename (userReport-YYYY-MM-DD.txt)
-                const datePart = file
-                  .replace("userReport-", "")
-                  .replace(".txt", "");
-                const content = window.localStorage.getItem(file) || "";
-                return {
-                  name: file,
-                  path: file,
-                  date: datePart,
-                  size: content.length,
-                };
-              });
-            } else {
-              const directory = FileSystem.documentDirectory;
-              const files = await FileSystem.readDirectoryAsync(directory);
-              const reportFiles = files.filter((file) =>
-                file.startsWith("userReport-")
-              );
-              reportDetails = await Promise.all(
-                reportFiles.map(async (file) => {
-                  const filePath = `${directory}${file}`;
-                  const fileInfo = await FileSystem.getInfoAsync(filePath);
-                  const datePart = file
-                    .replace("userReport-", "")
-                    .replace(".txt", "");
-                  return {
-                    name: file,
-                    path: filePath,
-                    date: datePart,
-                    size: fileInfo.size,
-                  };
-                })
-              );
-            }
-            // Sort by date (most recent first)
-            reportDetails.sort((a, b) => b.date.localeCompare(a.date));
-            setSavedReports(reportDetails);
-          } catch (err) {
-            console.error("Failed to list saved reports:", err);
-            setSavedReports([]);
-          }
-        };
-
-        findSavedReports();
+        try {
+          setSavedReports(await listSavedReports());
+        } catch (err) {
+          console.error("Failed to list saved reports:", err);
+          setSavedReports([]);
+        }
       } catch (error) {
         console.error("Failed to check for reports:", error);
       }
@@ -153,62 +115,24 @@ const SummaryScreen = ({ route, navigation }) => {
     checkForReports();
   }, [cleanedMessages]);
 
-  // Format date for filename
-  const getFormattedDate = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  // Save report to file system
   const saveReport = async (content) => {
     try {
       if (!content || reportSaved) return;
-
-      const formattedDate = getFormattedDate();
-      const fileName = `userReport-${formattedDate}.txt`;
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
-
-      if (Platform.OS === "web") {
-        // Save to localStorage on web
-        window.localStorage.setItem(fileName, content);
-        console.log(`Report saved to localStorage as: ${fileName}`);
-        await AsyncStorage.setItem("@last_report_path", fileName);
-        await AsyncStorage.setItem("@last_report_date", formattedDate);
-      } else {
-        // Native: Save to file system
-        await FileSystem.writeAsStringAsync(filePath, content);
-        console.log(`Report saved to: ${filePath}`);
-        await AsyncStorage.setItem("@last_report_path", filePath);
-        await AsyncStorage.setItem("@last_report_date", formattedDate);
-      }
-
+      const saved = await saveChatReport(content);
       setReportSaved(true);
-      Alert.alert(
-        "Report Saved",
-        `Your report has been saved as "${fileName}"`,
-        [{ text: "OK" }]
-      );
+      if (saved) {
+        setSavedReports(await listSavedReports());
+      }
     } catch (error) {
       console.error("Failed to save report:", error);
       Alert.alert("Error", "Failed to save the report");
     }
   };
 
-  // View a saved report
   const viewReport = async (reportPath) => {
     try {
-      let reportContent = "";
-      if (Platform.OS === "web") {
-        // On web, read from localStorage
-        reportContent =
-          window.localStorage.getItem(reportPath) || "Report not found.";
-      } else {
-        // Native: read from file system
-        reportContent = await FileSystem.readAsStringAsync(reportPath);
-      }
+      const reportContent =
+        (await readStoredText(reportPath)) || "Report not found.";
       setSummary(reportContent);
       setIndex(1); // Switch to Today tab
     } catch (error) {
@@ -239,39 +163,23 @@ const SummaryScreen = ({ route, navigation }) => {
             },
           ];
 
-          console.log("Sending request with:", formattedContents);
-
-          const response = await fetch(
-            "https://gemini-middleman-zeta.vercel.app/api/chat/",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contents: formattedContents,
-                systemInstruction: {
-                  role: "user",
-                  parts: [{ text: SYSTEM_INSTRUCTION_SUMMARY }],
-                },
-              }),
-            }
-          );
-
-          console.log("successfully sent");
-
-          const data = await response.json();
-          console.log("Raw response:", data);
-
-          const summaryText =
-            (data.reply || "").trim() || "No summary available.";
+          let summaryText = "";
+          if (isGeminiConfigured()) {
+            summaryText = await generateGeminiText({
+              contents: formattedContents,
+              systemInstruction: SYSTEM_INSTRUCTION_SUMMARY,
+            });
+          } else {
+            summaryText = buildLocalChatReport(cleanedMessages, userName);
+          }
+          summaryText = summaryText.trim() || "No summary available.";
           setSummary(summaryText);
-
-          // Save the report once we have content
           await saveReport(summaryText);
         } catch (error) {
           console.error("Error fetching summary:", error);
-          setSummary("Failed to generate summary. Please try again.");
+          const fallback = buildLocalChatReport(cleanedMessages, userName);
+          setSummary(fallback);
+          await saveReport(fallback);
         } finally {
           setIsLoading(false);
         }
@@ -291,33 +199,19 @@ const SummaryScreen = ({ route, navigation }) => {
             },
           ];
 
-          console.log("Sending request with:", formattedContents);
-
-          const response = await fetch(
-            "https://gemini-middleman-zeta.vercel.app/api/chat/",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contents: formattedContents,
-                systemInstruction: {
-                  role: "user",
-                  parts: [{ text: SYSTEM_INSTRUCTION_POINTS }],
-                },
-              }),
-            }
-          );
-
-          console.log("successfully sent");
-
-          const data = await response.json();
-          console.log("Raw response:", data);
+          let points = "";
+          if (isGeminiConfigured()) {
+            points = await generateGeminiText({
+              contents: formattedContents,
+              systemInstruction: SYSTEM_INSTRUCTION_POINTS,
+            });
+          }
 
           try {
-            const points = (data.reply || "").trim();
-            console.log("Points:", points);
+            if (!points) {
+              setKeyTakeaways(buildLocalKeyPoints(cleanedMessages));
+              return;
+            }
 
             // Attempt to extract JSON from the response text
             const jsonStartIndex = points.indexOf("{");
@@ -331,19 +225,15 @@ const SummaryScreen = ({ route, navigation }) => {
               const parsedPoints = JSON.parse(jsonString);
               setKeyTakeaways(parsedPoints);
             } else {
-              console.error(
-                "No valid JSON (possible backend error):",
-                data.error
-              );
-              setKeyTakeaways([]);
+              setKeyTakeaways(buildLocalKeyPoints(cleanedMessages));
             }
           } catch (jsonError) {
             console.error("Error parsing JSON:", jsonError);
-            setKeyTakeaways([]);
+            setKeyTakeaways(buildLocalKeyPoints(cleanedMessages));
           }
         } catch (error) {
           console.error("Error fetching points:", error);
-          setKeyTakeaways([]);
+          setKeyTakeaways(buildLocalKeyPoints(cleanedMessages));
         } finally {
           setIsLoading(false);
         }
@@ -411,7 +301,15 @@ const SummaryScreen = ({ route, navigation }) => {
       ]}
     >
       {summary ? (
-        <Markdown style={markdownStyles}>{summary}</Markdown>
+        <>
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => shareOrCopyText("MindLink check-in report", summary)}
+          >
+            <Text style={styles.shareButtonText}>Copy / Share report</Text>
+          </TouchableOpacity>
+          <Markdown style={markdownStyles}>{summary}</Markdown>
+        </>
       ) : (
         <View style={styles.noContentContainer}>
           <Text style={styles.noContentText}>
@@ -475,7 +373,7 @@ const SummaryScreen = ({ route, navigation }) => {
         />
         <View>
           <Text style={styles.headerText}>{userName}</Text>
-          <Text style={styles.headerSubText}>MindLink Report</Text>
+          <Text style={styles.headerSubText}>Reports & Session Brief</Text>
         </View>
       </View>
       {isLoading ? (
@@ -695,6 +593,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
+  },
+  shareButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fff",
+    borderColor: "#007bff",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  shareButtonText: {
+    color: "#007bff",
+    fontWeight: "600",
+    fontSize: 14,
   },
 });
 

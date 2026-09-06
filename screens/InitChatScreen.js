@@ -20,6 +20,8 @@ import { SYSTEM_INSTRUCTION_INITIAL } from "../utils/systemInstruction";
 import { Button, Header } from "react-native-elements"; // Import Header component
 import * as FileSystem from "expo-file-system"; // Replace RNFS with FileSystem
 import { Asset } from "expo-asset";
+import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import { requestBriefGeneration, saveCheckIn } from "../utils/localData";
 
 const InitChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
@@ -33,7 +35,13 @@ const InitChatScreen = ({ navigation }) => {
   // Set up the header with a button
   useEffect(() => {
     navigation.setOptions({
-      headerRight: null, // Remove the "1st Report" button
+      headerRight: () => (
+        <TouchableOpacity onPress={goToMainApp} style={{ marginRight: 12 }}>
+          <Text style={{ color: "#007bff", fontWeight: "600" }}>
+            Skip to journal
+          </Text>
+        </TouchableOpacity>
+      ),
     });
   }, [navigation]);
 
@@ -55,9 +63,32 @@ const InitChatScreen = ({ navigation }) => {
     console.log("Stored name:", storedName);
   }, []);
 
-  const API_URL_CHAT = "https://gemini-middleman-zeta.vercel.app/api/chat/";
-  // const API_URL_FILE = 'https://zesty-vacherin-99a16b.netlify.app/api/upload/';
-  // const API_URL_PERFORM_UPLOAD = 'https://zesty-vacherin-99a16b.netlify.app/api/perform-upload/';
+  const goToMainApp = async () => {
+    try {
+      await AsyncStorage.setItem("@initial_chat_completed", "true");
+    } catch (error) {
+      console.error("Failed to mark intro complete:", error);
+    }
+    navigation.navigate("MainApp");
+  };
+
+  const startSessionBrief = async (currentMessages = messages) => {
+    try {
+      await saveCheckIn(currentMessages);
+      await requestBriefGeneration();
+      const cleanedMessages = currentMessages.map(
+        ({ id, suggestedReplies, ...rest }) => rest
+      );
+      navigation.navigate("Summary", {
+        cleanedMessages,
+        isInitialFlow: true,
+        openInsights: true,
+      });
+    } catch (error) {
+      console.error("Failed to start Session Brief:", error);
+      Alert.alert("Error", "Could not open Session Brief.");
+    }
+  };
 
   // TODO DO NOT DELETE uploading pdf file to the API
   const uploadPDF = async (filePath, fileName, mimeType, numBytes) => {
@@ -296,41 +327,28 @@ So, what do you want to talk about today? You can share anything on your mind, o
         },
       });
 
-      const response = await fetch(API_URL_CHAT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: cleanedMessages,
-          systemInstruction: {
-            role: "user",
+      if (!isGeminiConfigured()) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString() + "-error",
+            role: "model",
             parts: [
               {
-                text: SYSTEM_INSTRUCTION_INITIAL,
+                text: "Gemini is not configured, so live chat is unavailable. Continue to the journal and generate a Session Brief from a diary entry, or add EXPO_PUBLIC_GEMINI_API_KEY and restart Expo.",
               },
             ],
           },
-          // for future use (when thinking is not experimental anymore)
-          //  generationConfig: {
-          //     thinkingConfig: {
-          //       thinkingBudget: 1024
-          //     }
-          //   }
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        ]);
+        return;
       }
 
-      console.log("successfully sent");
-
-      const data = await response.json();
-      console.log("Raw response:", data); // debug log for payload inbound
-
-      // Check for the end-of-conversation token
-      const botReply = (data.reply || "").trim();
+      const botReply = (
+        await generateGeminiText({
+          contents: cleanedMessages,
+          systemInstruction: SYSTEM_INSTRUCTION_INITIAL,
+        })
+      ).trim();
       if (botReply.includes("[END_OF_CONVERSATION]")) {
         const cleanBotReply = botReply
           .replace("[END_OF_CONVERSATION]", "")
@@ -346,38 +364,24 @@ So, what do you want to talk about today? You can share anything on your mind, o
         setTimeout(() => {
           if (Platform.OS === "web") {
             if (
-              window.confirm(
-                "Would you like me to create your first wellness report?"
-              )
+              window.confirm("Create your first Session Brief from this chat?")
             ) {
               setMessages((currentMessages) => {
-                const cleanedMessages = currentMessages.map(
-                  ({ id, suggestedReplies, ...rest }) => rest
-                );
-                navigation.navigate("Summary", {
-                  cleanedMessages,
-                  isInitialFlow: true,
-                });
+                startSessionBrief(currentMessages);
                 return currentMessages;
               });
             }
           } else {
             Alert.alert(
-              "Ready to Summarize?",
-              "Would you like me to create your first wellness report?",
+              "Create Session Brief?",
+              "Generate your first clinician Session Brief from this chat?",
               [
                 { text: "Not Yet", style: "cancel" },
                 {
                   text: "Yes, Please",
                   onPress: () => {
                     setMessages((currentMessages) => {
-                      const cleanedMessages = currentMessages.map(
-                        ({ id, suggestedReplies, ...rest }) => rest
-                      );
-                      navigation.navigate("Summary", {
-                        cleanedMessages,
-                        isInitialFlow: true,
-                      });
+                      startSessionBrief(currentMessages);
                       return currentMessages;
                     });
                   },
