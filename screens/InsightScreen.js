@@ -1,409 +1,325 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
-import { Platform } from "react-native";
 import Markdown from "react-native-markdown-display";
-
-// =================================================================================================
-// **MindLink Insight Engine**
-//
-// This screen implements the core "WOW factor" of the MindLink application: the Insight Engine.
-// It functions as a clinical intelligence platform, transforming raw, unstructured user diary
-// entries into a structured, scannable "Session Brief" for mental health professionals.
-//
-// The process follows a multi-step pipeline, as outlined in the product strategy, to ensure
-// that the final output is not just a simple summary, but a clinical synthesis. This avoids
-// the pitfalls of a simple "GPT wrapper" and provides tangible, actionable insights.
-// =================================================================================================
+import { getGeminiStatusLabel, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  generateSessionBriefArtifact,
+  loadCachedSessionBrief,
+} from "../utils/sessionBriefEngine";
+import { consumePendingBriefGeneration } from "../utils/localData";
+import { shareOrCopyText } from "../utils/shareText";
 
 const InsightScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [insights, setInsights] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [brief, setBrief] = useState(null);
+  const [error, setError] = useState("");
+  const [shareStatus, setShareStatus] = useState("");
 
   useEffect(() => {
-    generateInsights();
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      try {
+        const cached = await loadCachedSessionBrief();
+        const shouldGenerate = await consumePendingBriefGeneration();
+        if (cancelled) return;
+        if (cached) {
+          setBrief(cached);
+        }
+        if (shouldGenerate) {
+          await runGeneration();
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load Session Brief.");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  /**
-   * @description Orchestrates the generation of the "Session Brief" by executing the Insight Engine pipeline.
-   * This function follows the multi-step process of data retrieval, quantitative analysis,
-   * targeted AI-driven thematic analysis, and final synthesis.
-   */
-  const generateInsights = async () => {
-    setIsLoading(true);
+  const runGeneration = async () => {
+    setIsGenerating(true);
+    setError("");
     try {
-      // =================================================================
-      // **Step 1: Data Retrieval**
-      //
-      // Gather all diary entries and conversation summaries from the
-      // user's device. This is the raw data source for the Insight Engine.
-      // =================================================================
-      const allEntries = await getAllDiaryEntries();
-      const allSummariesText = await getAllSummaries();
-
-      if (allEntries.length === 0 && !allSummariesText.trim()) {
-        setInsights({
-          error: "Not enough data to generate insights. Keep journaling!",
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // =================================================================
-      // **Step 2: Quantitative Analysis (The "Easy Wins")**
-      //
-      // Perform non-AI-based analysis on structured data points. This
-      // provides an objective, quantitative anchor for the report.
-      // =================================================================
-      const moodTrajectory = getMoodTrajectory(allEntries);
-      const tagFrequency = getTagFrequency(allEntries);
-
-      // =================================================================
-      // **Step 3: Thematic Analysis (Targeted AI Task #1)**
-      //
-      // Use a targeted LLM call to extract recurring emotional themes
-      // from the user's journal entries and conversation summaries.
-      // =================================================================
-      const allDiaryText = allEntries.map((e) => e.response).join("\n\n");
-      const allText = `${allDiaryText}\n\n${allSummariesText}`.trim();
-      const themes = await getThemes(allText);
-
-      // =================================================================
-      // **Step 4: Correlation Heuristics (Targeted AI Task #2)**
-      //
-      // Identify days with low mood scores and use a targeted LLM call
-      // to find the primary stressors or topics mentioned on ONLY those days.
-      // This provides a powerful, achievable clinical heuristic.
-      // =================================================================
-      const lowMoodDays = allEntries.filter((e) => e.mood < 4);
-      const lowMoodText = lowMoodDays.map((e) => e.response).join("\n\n");
-      const correlations = await getCorrelations(lowMoodText);
-
-      // =================================================================
-      // **Step 5: Critical Quote Extraction (Targeted AI Task #3)**
-      //
-      // Use a targeted LLM call to find the single most poignant and
-      // emotionally resonant sentence from all entries and summaries. This serves as
-      // the "emotional hook" for the brief.
-      // =================================================================
-      const criticalQuote = await getCriticalQuote(allText);
-
-      // =================================================================
-      // **Step 6: Final Synthesis (The Final AI Task)**
-      //
-      // Combine all the structured data gathered in the previous steps
-      // into a single object. This object is then sent to the LLM with a
-      // final prompt to generate a well-written, empathetic, and
-      // professional "Session Brief". This ensures the AI is acting as a
-      // skilled writer, not an analyst, which is a more reliable task.
-      // =================================================================
-      const sessionBrief = await getSessionBrief({
-        mood_data: moodTrajectory,
-        tag_counts: tagFrequency,
-        themes: themes,
-        correlations: correlations,
-        critical_quote: criticalQuote,
-      });
-
-      setInsights({
-        moodTrajectory,
-        tagFrequency,
-        themes,
-        correlations,
-        criticalQuote,
-        sessionBrief,
-      });
-    } catch (error) {
-      console.error("Error generating insights:", error);
-      setInsights({ error: "Failed to generate insights." });
+      const record = await generateSessionBriefArtifact();
+      setBrief(record);
+    } catch (err) {
+      setError(err.message || "Failed to generate Session Brief.");
     } finally {
+      setIsGenerating(false);
       setIsLoading(false);
     }
   };
 
-  /**
-   * @description Retrieves all diary entries stored locally on the device.
-   * Supports both web (localStorage) and native (FileSystem) platforms.
-   * @returns {Promise<Array>} A promise that resolves to an array of diary entry objects.
-   */
-  const getAllDiaryEntries = async () => {
-    let diaryDetails = [];
-    if (Platform.OS === "web") {
-      const keys = Object.keys(window.localStorage).filter(
-        (key) => key.startsWith("diary-") && key.endsWith(".json")
-      );
-      for (const key of keys) {
-        const content = window.localStorage.getItem(key);
-        if (content) {
-          diaryDetails.push(JSON.parse(content));
-        }
-      }
-    } else {
-      const directory = FileSystem.documentDirectory;
-      const files = await FileSystem.readDirectoryAsync(directory);
-      const diaryFiles = files.filter(
-        (file) => file.startsWith("diary-") && file.endsWith(".json")
-      );
-      for (const file of diaryFiles) {
-        const filePath = `${directory}${file}`;
-        const content = await FileSystem.readAsStringAsync(filePath);
-        if (content) {
-          diaryDetails.push(JSON.parse(content));
-        }
-      }
-    }
-    return diaryDetails;
-  };
-
-  /**
-   * @description Retrieves all saved conversation summaries.
-   * These are generated from chat sessions and stored as text files.
-   * @returns {Promise<string>} A promise that resolves to a single string with all summaries concatenated.
-   */
-  const getAllSummaries = async () => {
-    let summaries = [];
-    if (Platform.OS === "web") {
-      const keys = Object.keys(window.localStorage).filter(
-        (key) => key.startsWith("userReport-") && key.endsWith(".txt")
-      );
-      for (const key of keys) {
-        const content = window.localStorage.getItem(key);
-        if (content) {
-          summaries.push(content);
-        }
-      }
-    } else {
-      const directory = FileSystem.documentDirectory;
-      const files = await FileSystem.readDirectoryAsync(directory);
-      const summaryFiles = files.filter(
-        (file) => file.startsWith("userReport-") && file.endsWith(".txt")
-      );
-      for (const file of summaryFiles) {
-        const filePath = `${directory}${file}`;
-        const content = await FileSystem.readAsStringAsync(filePath);
-        if (content) {
-          summaries.push(content);
-        }
-      }
-    }
-    return summaries.join("\n\n");
-  };
-
-  /**
-   * @description Extracts mood scores and dates to create the Mood Trajectory data.
-   * @param {Array} entries - The array of all diary entries.
-   * @returns {Array} An array of objects, each containing a date and a mood score.
-   */
-  const getMoodTrajectory = (entries) => {
-    return entries.map((e) => ({ date: e.date, mood: e.mood }));
-  };
-
-  /**
-   * @description Calculates the frequency of each user-selected tag.
-   * @param {Array} entries - The array of all diary entries.
-   * @returns {Object} An object where keys are tags and values are their counts.
-   */
-  const getTagFrequency = (entries) => {
-    const tagCounts = {};
-    entries.forEach((e) => {
-      if (e.tags) {
-        e.tags.forEach((tag) => {
-          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-        });
-      }
-    });
-    return tagCounts;
-  };
-
-  /**
-   * @description A wrapper for calling the Gemini API with a specific prompt and system instruction.
-   * @param {string} prompt - The user prompt for the AI.
-   * @param {string} systemInstruction - The system instruction to guide the AI's role.
-   * @returns {Promise<string>} The processed text reply from the AI.
-   */
-  const callGemini = async (prompt, systemInstruction) => {
-    const response = await fetch(
-      "https://gemini-middleman-zeta.vercel.app/api/chat/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          systemInstruction: {
-            role: "user",
-            parts: [{ text: systemInstruction }],
-          },
-        }),
-      }
+  const handleShare = async () => {
+    const shared = await shareOrCopyText(
+      "MindLink Session Brief",
+      brief?.markdown || ""
     );
-    const data = await response.json();
-    return (data.reply || "").trim();
-  };
-
-  /**
-   * @description AI Task #1: Extracts the top 3-5 recurring emotional themes from journal text.
-   * @param {string} text - A concatenation of all journal entries.
-   * @returns {Promise<Array<string>>} A promise that resolves to an array of theme strings.
-   */
-  const getThemes = async (text) => {
-    const prompt = `Analyze the following journal entries. Identify and extract the top 3-5 recurring emotional themes. Respond ONLY with a JSON array. Example: ["Exam-related stress", "Conflict with mother", "Feelings of social isolation"]\n\nEntries:\n${text}`;
-    const result = await callGemini(
-      prompt,
-      "You are an expert in thematic analysis."
-    );
-    try {
-      let cleansed = result.replace(/```[a-zA-Z]*|```/g, "").trim();
-      return JSON.parse(cleansed);
-    } catch (e) {
-      console.error("Failed to parse themes:", result);
-      return ["Could not determine themes."];
-    }
-  };
-
-  /**
-   * @description AI Task #2: Identifies primary stressors from entries on low-mood days.
-   * @param {string} text - A concatenation of journal entries from low-mood days.
-   * @returns {Promise<string>} A promise that resolves to a string listing the stressors.
-   */
-  const getCorrelations = async (text) => {
-    if (!text) return "No low mood days recorded.";
-    const prompt = `The user reported feeling very low on these days. Based ONLY on the following text from those days, what are the primary stressors or topics mentioned? Respond with a short list.\n\nText:\n${text}`;
-    return await callGemini(
-      prompt,
-      "You are an expert in identifying stressors."
+    setShareStatus(
+      shared ? "Brief copied or handed to the share sheet." : ""
     );
   };
 
-  /**
-   * @description AI Task #3: Extracts the single most poignant and representative quote.
-   * @param {string} text - A concatenation of all journal entries.
-   * @returns {Promise<string>} A promise that resolves to the extracted quote.
-   */
-  const getCriticalQuote = async (text) => {
-    const prompt = `Review the following personal journal entries. Extract the single most poignant, emotionally resonant, and representative sentence that encapsulates the writer's core struggle. It should be a direct quote. Respond with ONLY the sentence in a JSON object: {"quote": "The chosen sentence."}\n\nEntries:\n${text}`;
-    const result = await callGemini(
-      prompt,
-      "You are an expert in identifying emotionally significant quotes."
-    );
-    // Cleanse the result: remove code block markers and trim whitespace
-    let cleansed = result.replace(/```[a-zA-Z]*|```/g, "").trim();
-    try {
-      const parsed = JSON.parse(cleansed);
-      return parsed.quote;
-    } catch (e) {
-      console.error("Failed to parse quote:", result);
-      return "Could not extract a critical quote.";
-    }
-  };
-
-  /**
-   * @description Final AI Task: Synthesizes all structured data into a final, professional brief.
-   * @param {Object} data - The structured data object containing all prior analysis.
-   * @returns {Promise<string>} A promise that resolves to the final Session Brief markdown string.
-   */
-  const getSessionBrief = async (data) => {
-    const prompt = `You are a clinical assistant writing a summary for a busy psychiatrist. Based on the following structured data, write a concise, professional, and empathetic 'Session Brief'. Start with the mood trajectory, then highlight the key correlations and themes, include the critical quote to humanize the data, and conclude with two suggested opening questions for the psychiatrist to use in their session. Be brief and scannable.\n\nData:\n${JSON.stringify(
-      data,
-      null,
-      2
-    )}`;
-    return await callGemini(prompt, "You are a helpful clinical assistant.");
-  };
-
-  /**
-   * @description Renders the UI based on the current state (loading, error, or success).
-   * When successful, it displays the full "Session Brief".
-   */
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007bff" />
-          <Text style={styles.loadingText}>Generating Insights...</Text>
-        </View>
-      );
-    }
-
-    if (insights?.error) {
-      return (
-        <View style={styles.noContentContainer}>
-          <Text style={styles.noContentText}>{insights.error}</Text>
-        </View>
-      );
-    }
-
-    if (!insights) {
-      return (
-        <View style={styles.noContentContainer}>
-          <Text style={styles.noContentText}>No insights available.</Text>
-        </View>
-      );
-    }
-
+  if (isLoading && !brief) {
     return (
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.header}>Session Brief</Text>
-        <Text style={styles.sectionContent}>
-          Meant to be read by a psychiatrist, placed here for demo purposes.
-        </Text>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Final Summary</Text>
-          <Markdown style={styles.sectionContent}>
-            {insights.sessionBrief}
-          </Markdown>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Critical Quote</Text>
-          <Text style={styles.quote}>"{insights.criticalQuote}"</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mood Trajectory</Text>
-          {insights.moodTrajectory.map((mood, index) => (
-            <Text key={index} style={styles.sectionContent}>
-              {mood.date}: {mood.mood}/10
-            </Text>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tag Frequency</Text>
-          {Object.entries(insights.tagFrequency).map(([tag, count]) => (
-            <Text key={tag} style={styles.sectionContent}>
-              #{tag}: {count} times
-            </Text>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recurring Themes</Text>
-          {insights.themes.map((theme, index) => (
-            <Text key={index} style={styles.sectionContent}>
-              - {theme}
-            </Text>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Low Mood Stressors</Text>
-          <Text style={styles.sectionContent}>{insights.correlations}</Text>
-        </View>
-      </ScrollView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007bff" />
+        <Text style={styles.loadingText}>Loading Session Brief…</Text>
+      </View>
     );
-  };
+  }
 
-  return <View style={styles.container}>{renderContent()}</View>;
+  const analysis = brief?.analysis;
+  const geminiReady = isGeminiConfigured();
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+    >
+      <Text style={styles.header}>Session Brief</Text>
+      <Text style={styles.audienceNote}>
+        Written for a clinician before or during a session. Stored on this
+        device. Teen-facing chat stays separate.
+      </Text>
+
+      <View
+        style={[
+          styles.statusBanner,
+          geminiReady && brief?.mode === "gemini"
+            ? styles.statusReady
+            : styles.statusDemo,
+        ]}
+      >
+        <Text style={styles.statusTitle}>
+          {brief?.mode === "gemini"
+            ? "Synthesized with Gemini"
+            : getGeminiStatusLabel()}
+        </Text>
+        <Text style={styles.statusBody}>
+          {brief?.warning ||
+            (geminiReady
+              ? "Journal, check-in, and local report data stay on-device except for this Gemini synthesis call."
+              : "Set EXPO_PUBLIC_GEMINI_API_KEY to replace the local demo narrative with a Gemini synthesis. Structure and on-device analysis stay the same.")}
+        </Text>
+      </View>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={runGeneration}
+          disabled={isGenerating}
+        >
+          {isGenerating ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>
+              {brief ? "Regenerate Session Brief" : "Generate Session Brief"}
+            </Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.secondaryButton, !brief && styles.buttonDisabled]}
+          onPress={handleShare}
+          disabled={!brief}
+        >
+          <Text style={styles.secondaryButtonText}>Copy / Share</Text>
+        </TouchableOpacity>
+        {shareStatus ? (
+          <Text style={styles.shareStatus}>{shareStatus}</Text>
+        ) : null}
+      </View>
+
+      {error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {!brief && !error ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyTitle}>No brief yet</Text>
+          <Text style={styles.emptyText}>
+            Save a diary entry (mood + tags) or finish a short check-in, then
+            generate a clinician Session Brief here.
+          </Text>
+        </View>
+      ) : null}
+
+      {analysis ? (
+        <>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Data used</Text>
+            <Text style={styles.sectionContent}>
+              {analysis.dataSources.diaryEntries} journal entries ·{" "}
+              {analysis.dataSources.checkIns} check-ins ·{" "}
+              {analysis.dataSources.chatReports} chat reports
+            </Text>
+            <Text style={styles.sectionContent}>
+              {analysis.moodSummary.count > 0
+                ? `Self-rated mood: avg ${analysis.moodSummary.average}/10 (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
+                : "No self-rated mood scores stored yet."}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Mood trajectory</Text>
+            {analysis.moodTrajectory.length > 0 ? (
+              analysis.moodTrajectory.map((mood) => (
+                <Text key={`${mood.date}-${mood.mood}`} style={styles.sectionContent}>
+                  {mood.date}: {mood.mood}/10
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.sectionContent}>
+                No journal mood scores available.
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Tag frequency</Text>
+            {Object.keys(analysis.tagFrequency).length > 0 ? (
+              Object.entries(analysis.tagFrequency).map(([tag, count]) => (
+                <Text key={tag} style={styles.sectionContent}>
+                  #{tag}: {count}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.sectionContent}>No diary tags selected yet.</Text>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recurring themes</Text>
+            {analysis.themes.length > 0 ? (
+              analysis.themes.map((theme) => (
+                <Text key={theme} style={styles.sectionContent}>
+                  • {theme}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.sectionContent}>
+                Not enough repeated topics yet.
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Lower-mood stressors</Text>
+            <Text style={styles.sectionContent}>
+              {analysis.correlations.summary}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Notable quote</Text>
+            <Text style={styles.quote}>
+              {analysis.criticalQuote?.quote
+                ? `“${analysis.criticalQuote.quote}”`
+                : "No user quote extracted yet."}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Suggested opening questions</Text>
+            {(analysis.openingQuestions || []).length > 0 ? (
+              analysis.openingQuestions.map((question) => (
+                <Text key={question} style={styles.sectionContent}>
+                  • {question}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.sectionContent}>
+                Generate a brief to get suggested openers.
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Observational signals (user-reported)
+            </Text>
+            <Text style={styles.finePrint}>
+              Keyword mentions from journal/check-in text. Not a PHQ-9 score or
+              diagnosis.
+            </Text>
+            {analysis.observationalSignals.length > 0 ? (
+              analysis.observationalSignals.map((signal) => (
+                <Text key={signal.id} style={styles.sectionContent}>
+                  • {signal.label} — {signal.mentionCount} mention
+                  {signal.mentionCount === 1 ? "" : "s"} in{" "}
+                  {signal.sources.join(", ")}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.sectionContent}>
+                No PHQ-adjacent phrases detected in stored user text.
+              </Text>
+            )}
+          </View>
+        </>
+      ) : null}
+
+      {brief?.narrative ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Clinician notes</Text>
+          <Markdown style={markdownStyles}>{brief.narrative}</Markdown>
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+};
+
+const markdownStyles = {
+  body: {
+    fontSize: 16,
+    color: "#333",
+    lineHeight: 24,
+  },
+  heading1: {
+    fontSize: 22,
+    color: "#2e4057",
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  heading2: {
+    fontSize: 18,
+    color: "#007bff",
+    fontWeight: "bold",
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  strong: {
+    fontWeight: "bold",
+  },
+  em: {
+    fontStyle: "italic",
+  },
+  bullet_list: {
+    marginVertical: 8,
+  },
+  list_item: {
+    fontSize: 16,
+    color: "#333",
+    lineHeight: 24,
+  },
 };
 
 const styles = StyleSheet.create({
@@ -411,55 +327,149 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f8fa",
   },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 48,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: "#666",
   },
-  noContentContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  noContentText: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-  },
-  contentContainer: {
-    padding: 20,
-  },
   header: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "bold",
     color: "#2e4057",
-    marginBottom: 24,
-    textAlign: "center",
+    marginBottom: 8,
+  },
+  audienceNote: {
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  statusBanner: {
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  statusReady: {
+    backgroundColor: "#e8f4f8",
+    borderWidth: 1,
+    borderColor: "#b6d7ea",
+  },
+  statusDemo: {
+    backgroundColor: "#fff6e5",
+    borderWidth: 1,
+    borderColor: "#f0d9a6",
+  },
+  statusTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#2e4057",
+    marginBottom: 4,
+  },
+  statusBody: {
+    fontSize: 13,
+    color: "#444",
+    lineHeight: 18,
+  },
+  actions: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  primaryButton: {
+    backgroundColor: "#007bff",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  secondaryButton: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#007bff",
+  },
+  secondaryButtonText: {
+    color: "#007bff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  buttonDisabled: {
+    opacity: 0.45,
+  },
+  errorBox: {
+    backgroundColor: "#fdecea",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: "#8a1f11",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  emptyBox: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2e4057",
+    marginBottom: 6,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: "#555",
+    lineHeight: 22,
   },
   section: {
-    marginBottom: 20,
-    padding: 15,
+    marginBottom: 16,
+    padding: 14,
     backgroundColor: "#fff",
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#ddd",
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "bold",
     color: "#007bff",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sectionContent: {
-    fontSize: 16,
+    fontSize: 15,
     color: "#333",
-    lineHeight: 24,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  finePrint: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  shareStatus: {
+    fontSize: 13,
+    color: "#2e7d32",
+    textAlign: "center",
   },
   quote: {
     fontSize: 16,
