@@ -19,6 +19,10 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SYSTEM_INSTRUCTION from "../utils/systemInstruction";
 import { Button } from "react-native-elements";
+import {
+  buildContextQueryFromMessages,
+  withClinicalContext,
+} from "../utils/contextApi";
 import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
 import {
   loadDailyChatMessages,
@@ -221,10 +225,14 @@ const DailyChatScreen = ({ navigation }) => {
         console.error("Failed to load latest report:", err);
       }
 
+      const { systemInstruction } = await withClinicalContext(
+        `${SYSTEM_INSTRUCTION}\n\n\n${userName}${latestReport}`,
+        buildContextQueryFromMessages(formattedContents)
+      );
       const botResponse = (
         await generateGeminiText({
           contents: formattedContents,
-          systemInstruction: `${SYSTEM_INSTRUCTION}\n\n\n${userName}${latestReport}`,
+          systemInstruction,
         })
       ).trim();
 

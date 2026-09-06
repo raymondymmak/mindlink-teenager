@@ -38,13 +38,14 @@ Optional: from **Chat**, tap **Create Session Brief** after a short check-in. Wi
 
 ### Demo path (with Gemini key)
 
-Same as above. Chat uses Gemini directly. The Brief tab synthesizes the on-device analysis with one Gemini write-up. If Gemini fails, the same structured local brief is shown.
+Same as above. Chat uses Gemini Flash directly. Before each chat turn or Session Brief / report synthesis, the app asks the middleman context API for Pinecone RAG snippets and appends them to the system instruction. If that context call fails, Gemini continues without retrieved context. If Gemini fails, the same structured local brief is shown.
 
 ### Privacy
 
 - Journal entries, check-ins, chat reports, and Session Briefs are stored on-device (`AsyncStorage` / `localStorage` on web, `expo-file-system` on native).
-- When a Gemini key is set, the app calls the **Gemini Developer API directly**. It does not use `gemini-middleman` or any Vercel proxy.
-- Payloads are limited to the current chat turn or the already-computed Session Brief observations. Pinecone / RAG is out of scope for this MVP.
+- When a Gemini key is set, the app calls the **Gemini Developer API directly** (`gemini-3.6-flash` by default). It does not proxy Gemini through `gemini-middleman`.
+- Clinical procedure snippets come from `POST /api/context` on the middleman. The Expo client never embeds `PINECONE_KEY` or talks to Pinecone.
+- Payloads to Gemini are the current chat turn or the already-computed Session Brief observations, plus optional retrieved context in the system preamble.
 - Without a key, brief generation stays on-device.
 
 ## Gemini API key
@@ -54,6 +55,7 @@ This Expo 53 app reads:
 ```bash
 EXPO_PUBLIC_GEMINI_API_KEY=your_key_here
 EXPO_PUBLIC_GEMINI_MODEL=gemini-3.6-flash
+EXPO_PUBLIC_CONTEXT_API_URL=https://gemini-middleman-zeta.vercel.app/api/context
 ```
 
 1. Create a key in [Google AI Studio](https://aistudio.google.com/apikey).
@@ -65,6 +67,7 @@ Expo web only inlines `EXPO_PUBLIC_*` variables. For EAS Hosting, export the web
 ```bash
 EXPO_PUBLIC_GEMINI_API_KEY="$GEMINI_KEY" \
 EXPO_PUBLIC_GEMINI_MODEL="${EXPO_PUBLIC_GEMINI_MODEL:-gemini-3.6-flash}" \
+EXPO_PUBLIC_CONTEXT_API_URL="${EXPO_PUBLIC_CONTEXT_API_URL:-https://gemini-middleman-zeta.vercel.app/api/context}" \
   npx expo export -p web
 npx eas-cli deploy --prod --non-interactive
 ```
@@ -73,11 +76,25 @@ npx eas-cli deploy --prod --non-interactive
 
 The client prefers `@google/genai` and falls back to the official REST endpoint (`generativelanguage.googleapis.com`) if the SDK cannot run in React Native. Never hardcode the key in source.
 
+## Pinecone RAG via middleman context API
+
+Gemini Flash stays in-app. Retrieved clinical procedure text is fetched separately:
+
+```http
+POST /api/context
+{ "query": "..." } → { "context": "...", "matches": [...] }
+```
+
+Default URL is the working production host `https://gemini-middleman-zeta.vercel.app/api/context`. The newer alias `https://gemini-middleman.vercel.app/api/context` currently returns 404; switch `EXPO_PUBLIC_CONTEXT_API_URL` once that route is deployed. If the context API is down, chat and brief synthesis continue without RAG.
+
+Never put `PINECONE_KEY` in Expo, `.env`, or EAS public env. That secret belongs only on the middleman.
+
 ## Tech Stack
 
 - **Frontend for teenagers**: React Native (with Expo)
 - **Frontend for doctors**: React (with Vite) — separate repo (`mindlink-doctor`)
-- **LLM**: Gemini Developer API, called from this app (no middleman)
+- **LLM**: Gemini Developer API, called from this app (Flash stays direct)
+- **RAG**: middleman `POST /api/context` → Pinecone index `mindlink-knowledge-base`
 
 ## Scripts
 
@@ -85,6 +102,7 @@ The client prefers `@google/genai` and falls back to the official REST endpoint 
 npm start           # expo start
 npm run web         # expo start --web
 node scripts/test-session-brief.js
+node scripts/test-context-api.mjs
 ```
 
 ## Contributing

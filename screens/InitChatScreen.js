@@ -16,6 +16,10 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  buildContextQueryFromMessages,
+  withClinicalContext,
+} from "../utils/contextApi";
 import { SYSTEM_INSTRUCTION_INITIAL } from "../utils/systemInstruction";
 import { Button, Header } from "react-native-elements"; // Import Header component
 import * as FileSystem from "expo-file-system"; // Replace RNFS with FileSystem
@@ -347,10 +351,14 @@ So, what do you want to talk about today? You can share anything on your mind, o
         return;
       }
 
+      const { systemInstruction } = await withClinicalContext(
+        SYSTEM_INSTRUCTION_INITIAL,
+        buildContextQueryFromMessages(cleanedMessages)
+      );
       const botReply = (
         await generateGeminiText({
           contents: cleanedMessages,
-          systemInstruction: SYSTEM_INSTRUCTION_INITIAL,
+          systemInstruction,
         })
       ).trim();
       if (botReply.includes("[END_OF_CONVERSATION]")) {

@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test:session-brief": "node scripts/test-session-brief.js",
-    "test:gemini-client": "node scripts/test-gemini-client.mjs"
+    "test:gemini-client": "node scripts/test-gemini-client.mjs",
+    "test:context-api": "node scripts/test-context-api.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",

@@ -1,3 +1,7 @@
+import {
+  buildContextQueryFromAnalysis,
+  withClinicalContext,
+} from "./contextApi";
 import { generateGeminiText, isGeminiConfigured } from "./geminiClient";
 import { SYSTEM_INSTRUCTION_SESSION_BRIEF } from "./systemInstruction";
 import {
@@ -63,9 +67,13 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
 
   if (!forceLocal && isGeminiConfigured()) {
     try {
+      const { systemInstruction } = await withClinicalContext(
+        SYSTEM_INSTRUCTION_SESSION_BRIEF,
+        buildContextQueryFromAnalysis(analysis)
+      );
       narrative = await generateGeminiText({
         contents: buildSynthesisPrompt(analysis),
-        systemInstruction: SYSTEM_INSTRUCTION_SESSION_BRIEF,
+        systemInstruction,
       });
       mode = "gemini";
     } catch (error) {

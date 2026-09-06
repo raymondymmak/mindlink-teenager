@@ -19,6 +19,10 @@ import {
   SYSTEM_INSTRUCTION_POINTS,
 } from "../utils/systemInstruction";
 import InsightScreen from "./InsightScreen";
+import {
+  buildContextQueryFromMessages,
+  withClinicalContext,
+} from "../utils/contextApi";
 import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
 import {
   listSavedReports,
@@ -165,9 +169,13 @@ const SummaryScreen = ({ route, navigation }) => {
 
           let summaryText = "";
           if (isGeminiConfigured()) {
+            const { systemInstruction } = await withClinicalContext(
+              SYSTEM_INSTRUCTION_SUMMARY,
+              buildContextQueryFromMessages(cleanedMessages)
+            );
             summaryText = await generateGeminiText({
               contents: formattedContents,
-              systemInstruction: SYSTEM_INSTRUCTION_SUMMARY,
+              systemInstruction,
             });
           } else {
             summaryText = buildLocalChatReport(cleanedMessages, userName);
