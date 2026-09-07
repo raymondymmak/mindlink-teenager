@@ -3,10 +3,6 @@
 // npx expo start --tunnel
 
 import React, { useState, useEffect } from "react";
-import {
-  NavigationContainer,
-  NavigationIndependentTree,
-} from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
@@ -114,41 +110,37 @@ function MainAppTabs({ navigation }) {
 }
 
 export default function App() {
+  // Expo Router's ExpoRoot already mounts a NavigationContainer. The legacy
+  // stack/tabs nest under that single container — do not wrap another one.
   return (
     <HelmetProvider>
-      {/* Expo Router already mounts a NavigationContainer. Keep the existing
-          React Navigation tree independent so screens stay on App.js. */}
-      <NavigationIndependentTree>
-        <NavigationContainer>
-          <Stack.Navigator
-            initialRouteName="Welcome"
-            screenOptions={{
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen name="Welcome" component={WelcomeScreen} />
-            <Stack.Screen
-              name="Chat"
-              component={InitChatScreen}
-              options={{ headerShown: true }}
-            />
-            <Stack.Screen
-              name="Summary"
-              component={SummaryScreen}
-              options={{
-                headerShown: true,
-                headerLeft: null, // Remove back button
-                gestureEnabled: false, // Disable swipe back gesture
-              }}
-            />
-            <Stack.Screen
-              name="JourneyContinues"
-              component={JourneyContinuesScreen}
-            />
-            <Stack.Screen name="MainApp" component={MainAppTabs} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </NavigationIndependentTree>
+      <Stack.Navigator
+        initialRouteName="Welcome"
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        <Stack.Screen
+          name="Chat"
+          component={InitChatScreen}
+          options={{ headerShown: true }}
+        />
+        <Stack.Screen
+          name="Summary"
+          component={SummaryScreen}
+          options={{
+            headerShown: true,
+            headerLeft: null, // Remove back button
+            gestureEnabled: false, // Disable swipe back gesture
+          }}
+        />
+        <Stack.Screen
+          name="JourneyContinues"
+          component={JourneyContinuesScreen}
+        />
+        <Stack.Screen name="MainApp" component={MainAppTabs} />
+      </Stack.Navigator>
     </HelmetProvider>
   );
 }
