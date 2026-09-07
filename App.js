@@ -3,7 +3,10 @@
 // npx expo start --tunnel
 
 import React, { useState, useEffect } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  NavigationIndependentTree,
+} from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
@@ -19,8 +22,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { HelmetProvider } from "react-helmet-async";
 
-// Apply global style to prevent zoom on iOS
-if (Platform.OS === "web") {
+// Apply global style to prevent zoom on iOS. Guard document so Expo Router
+// server rendering (web.output: "server") does not crash in Node.
+if (Platform.OS === "web" && typeof document !== "undefined") {
   const style = document.createElement("style");
   style.textContent = `
     input, textarea, select, button {
@@ -31,15 +35,17 @@ if (Platform.OS === "web") {
 
   // Override default TextInput behavior
   const originalRender = TextInput.render;
-  TextInput.render = function (...args) {
-    const oldProps = args[0] || {};
-    const newProps = {
-      ...oldProps,
-      style: [{ fontSize: 16 }, oldProps.style],
+  if (typeof originalRender === "function") {
+    TextInput.render = function (...args) {
+      const oldProps = args[0] || {};
+      const newProps = {
+        ...oldProps,
+        style: [{ fontSize: 16 }, oldProps.style],
+      };
+      args[0] = newProps;
+      return originalRender.apply(this, args);
     };
-    args[0] = newProps;
-    return originalRender.apply(this, args);
-  };
+  }
 }
 
 // Import screens
@@ -110,35 +116,39 @@ function MainAppTabs({ navigation }) {
 export default function App() {
   return (
     <HelmetProvider>
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName="Welcome"
-          screenOptions={{
-            headerShown: false,
-          }}
-        >
-          <Stack.Screen name="Welcome" component={WelcomeScreen} />
-          <Stack.Screen
-            name="Chat"
-            component={InitChatScreen}
-            options={{ headerShown: true }}
-          />
-          <Stack.Screen
-            name="Summary"
-            component={SummaryScreen}
-            options={{
-              headerShown: true,
-              headerLeft: null, // Remove back button
-              gestureEnabled: false, // Disable swipe back gesture
+      {/* Expo Router already mounts a NavigationContainer. Keep the existing
+          React Navigation tree independent so screens stay on App.js. */}
+      <NavigationIndependentTree>
+        <NavigationContainer>
+          <Stack.Navigator
+            initialRouteName="Welcome"
+            screenOptions={{
+              headerShown: false,
             }}
-          />
-          <Stack.Screen
-            name="JourneyContinues"
-            component={JourneyContinuesScreen}
-          />
-          <Stack.Screen name="MainApp" component={MainAppTabs} />
-        </Stack.Navigator>
-      </NavigationContainer>
+          >
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen
+              name="Chat"
+              component={InitChatScreen}
+              options={{ headerShown: true }}
+            />
+            <Stack.Screen
+              name="Summary"
+              component={SummaryScreen}
+              options={{
+                headerShown: true,
+                headerLeft: null, // Remove back button
+                gestureEnabled: false, // Disable swipe back gesture
+              }}
+            />
+            <Stack.Screen
+              name="JourneyContinues"
+              component={JourneyContinuesScreen}
+            />
+            <Stack.Screen name="MainApp" component={MainAppTabs} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </NavigationIndependentTree>
     </HelmetProvider>
   );
 }
