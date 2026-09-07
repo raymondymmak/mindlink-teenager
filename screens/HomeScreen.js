@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,13 +13,164 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
-import { TabView, SceneMap, TabBar } from "react-native-tab-view";
+import { TabView, TabBar } from "react-native-tab-view";
 import Slider from "@react-native-community/slider";
-import { requestBriefGeneration } from "../utils/localData";
+import {
+  getDiaryEntries,
+  requestBriefGeneration,
+  saveDiaryEntry,
+} from "../utils/localData";
+
+const AVAILABLE_TAGS = [
+  "school",
+  "family",
+  "friends",
+  "anxiety",
+  "procrastination",
+  "lonely",
+];
+
+function formatDiarySize(size) {
+  const bytes = Number(size) || 0;
+  if (bytes < 1024) return `${bytes} B`;
+  return `${Math.round((bytes / 1024) * 10) / 10} KB`;
+}
+
+function DiaryWriteTab({ userName, date, prompt, onSave }) {
+  const [localDiaryEntry, setLocalDiaryEntry] = useState("");
+  const [localMoodValue, setLocalMoodValue] = useState(5);
+  const [localSelectedTags, setLocalSelectedTags] = useState([]);
+  const payloadRef = useRef({
+    response: "",
+    mood: 5,
+    tags: [],
+  });
+  const textInputRef = React.useRef(null);
+
+  payloadRef.current = {
+    response: localDiaryEntry,
+    mood: localMoodValue,
+    tags: [...localSelectedTags],
+  };
+
+  const toggleTagLocal = (tag) => {
+    setLocalSelectedTags((prevTags) =>
+      prevTags.includes(tag)
+        ? prevTags.filter((t) => t !== tag)
+        : [...prevTags, tag]
+    );
+  };
+
+  const handleSave = async () => {
+    const snapshot = {
+      response: payloadRef.current.response,
+      mood: payloadRef.current.mood,
+      tags: [...payloadRef.current.tags],
+    };
+    if (!snapshot.response.trim()) {
+      Alert.alert("Empty Entry", "Please write something before saving.");
+      return;
+    }
+    const saved = await onSave(snapshot);
+    if (saved !== false) {
+      setLocalDiaryEntry("");
+      setLocalSelectedTags([]);
+      setLocalMoodValue(5);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.scrollContent}>
+      <View style={styles.header}>
+        <Text style={styles.greeting}>Hello, {userName}!</Text>
+        <Text style={styles.date}>{date}</Text>
+      </View>
+
+      <View style={styles.promptContainer}>
+        <Text style={styles.promptText}>{prompt}</Text>
+      </View>
+
+      <View style={styles.diaryContainer}>
+        <TextInput
+          ref={textInputRef}
+          style={styles.diaryInput}
+          multiline={true}
+          placeholder="Write your thoughts here..."
+          value={localDiaryEntry}
+          onChangeText={setLocalDiaryEntry}
+          textAlignVertical="top"
+          autoFocus={false}
+          autoCorrect={false}
+          keyboardType="default"
+          blurOnSubmit={false}
+        />
+      </View>
+
+      <View style={styles.moodContainer}>
+        <Text style={styles.moodLabel}>
+          How are you feeling? (1-10): {localMoodValue}
+        </Text>
+        <Slider
+          style={{ width: "100%", height: 40 }}
+          minimumValue={1}
+          maximumValue={10}
+          step={1}
+          value={localMoodValue}
+          onValueChange={setLocalMoodValue}
+          minimumTrackTintColor="#007bff"
+          maximumTrackTintColor="#d3d3d3"
+        />
+      </View>
+
+      <View style={styles.tagsContainer}>
+        <Text style={styles.tagsLabel}>Add tags:</Text>
+        <View style={styles.tagsWrapper}>
+          {AVAILABLE_TAGS.map((tag) => (
+            <TouchableOpacity
+              key={tag}
+              style={[
+                styles.tag,
+                localSelectedTags.includes(tag) && styles.selectedTag,
+              ]}
+              onPress={() => toggleTagLocal(tag)}
+            >
+              <Text
+                style={[
+                  styles.tagText,
+                  localSelectedTags.includes(tag) && styles.selectedTagText,
+                ]}
+              >
+                #{tag}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+        <Text style={styles.saveButtonText}>Save Entry</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+function formatDisplayDate(datePart) {
+  try {
+    const [year, month, day] = String(datePart || "").split("-");
+    const entryDate = new Date(year, month - 1, day);
+    if (Number.isNaN(entryDate.getTime())) return datePart || "";
+    return entryDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return datePart || "";
+  }
+}
 
 const HomeScreen = ({ navigation }) => {
-  const [diaryEntry, setDiaryEntry] = useState("");
   const [prompt, setPrompt] = useState("");
   const [userName, setUserName] = useState("User");
   const [date, setDate] = useState("");
@@ -27,24 +178,12 @@ const HomeScreen = ({ navigation }) => {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [index, setIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [moodValue, setMoodValue] = useState(5);
-  const [selectedTags, setSelectedTags] = useState([]);
   const [routes] = useState([
     { key: "write", title: "Write" },
     { key: "history", title: "History" },
   ]);
 
-  const availableTags = [
-    "school",
-    "family",
-    "friends",
-    "anxiety",
-    "procrastination",
-    "lonely",
-  ];
-
   useEffect(() => {
-    // Get current date
     const currentDate = new Date();
     const formattedDate = currentDate.toLocaleDateString("en-US", {
       weekday: "long",
@@ -54,7 +193,6 @@ const HomeScreen = ({ navigation }) => {
     });
     setDate(formattedDate);
 
-    // Fetch user name
     const fetchUserName = async () => {
       try {
         const storedName = await AsyncStorage.getItem("@user_name");
@@ -66,7 +204,6 @@ const HomeScreen = ({ navigation }) => {
       }
     };
 
-    // Generate daily prompt
     const getDailyPrompt = () => {
       const prompts = [
         "How are you feeling today? Share your thoughts and emotions.",
@@ -80,11 +217,8 @@ const HomeScreen = ({ navigation }) => {
         "If you could change one thing about today, what would it be?",
         "What's something you did today that you're proud of?",
       ];
-
-      // Get a semi-random prompt based on the date
       const dayOfMonth = currentDate.getDate();
-      const promptIndex = dayOfMonth % prompts.length;
-      return prompts[promptIndex];
+      return prompts[dayOfMonth % prompts.length];
     };
 
     fetchUserName();
@@ -92,94 +226,23 @@ const HomeScreen = ({ navigation }) => {
     loadDiaryEntries();
   }, []);
 
-  const toggleTag = (tag) => {
-    setSelectedTags((prevTags) =>
-      prevTags.includes(tag)
-        ? prevTags.filter((t) => t !== tag)
-        : [...prevTags, tag]
-    );
-  };
-
-  // Load saved diary entries
   const loadDiaryEntries = async () => {
     try {
       setIsLoading(true);
-      let diaryDetails = [];
-      if (Platform.OS === "web") {
-        // On web, scan localStorage keys
-        const files = Object.keys(window.localStorage).filter(
-          (key) => key.startsWith("diary-") && key.endsWith(".json")
-        );
-        diaryDetails = files.map((file) => {
-          const content = window.localStorage.getItem(file) || "";
-          let datePart = "";
-          let displayDate = "";
-          try {
-            const parsed = JSON.parse(content);
-            datePart = parsed.date;
-            const [year, month, day] = datePart.split("-");
-            const entryDate = new Date(year, month - 1, day);
-            displayDate = entryDate.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            });
-          } catch {
-            // fallback for old format
-            datePart = file.replace("diary-", "").replace(".json", "");
-            displayDate = datePart;
-          }
-          return {
-            name: file,
-            path: file,
-            date: datePart,
-            displayDate,
-            size: content.length,
-          };
-        });
-      } else {
-        const directory = FileSystem.documentDirectory;
-        const files = await FileSystem.readDirectoryAsync(directory);
-        // Prefer .json files
-        const diaryFiles = files.filter(
-          (file) => file.startsWith("diary-") && file.endsWith(".json")
-        );
-        diaryDetails = await Promise.all(
-          diaryFiles.map(async (file) => {
-            const filePath = `${directory}${file}`;
-            const fileInfo = await FileSystem.getInfoAsync(filePath);
-            let datePart = "";
-            let displayDate = "";
-            try {
-              const content = await FileSystem.readAsStringAsync(filePath);
-              const parsed = JSON.parse(content);
-              datePart = parsed.date;
-              const [year, month, day] = datePart.split("-");
-              const entryDate = new Date(year, month - 1, day);
-              displayDate = entryDate.toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              });
-            } catch {
-              // fallback for old format
-              datePart = file.replace("diary-", "").replace(".json", "");
-              displayDate = datePart;
-            }
-            return {
-              name: file,
-              path: filePath,
-              date: datePart,
-              displayDate,
-              size: fileInfo.size,
-            };
-          })
-        );
-      }
-      // Sort by date (most recent first)
-      diaryDetails.sort((a, b) => b.date.localeCompare(a.date));
+      const entries = await getDiaryEntries();
+      const diaryDetails = entries
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+        .map((entry) => ({
+          name: entry.file,
+          path: entry.file,
+          date: entry.date,
+          displayDate: formatDisplayDate(entry.date),
+          size: entry.size || 0,
+          mood: entry.mood,
+          tags: entry.tags || [],
+          response: entry.response || "",
+        }));
       setSavedDiaries(diaryDetails);
     } catch (err) {
       console.error("Failed to list saved diaries:", err);
@@ -189,191 +252,24 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  // View a saved diary entry
-  const viewDiaryEntry = async (entryPath) => {
-    try {
-      let entryContent = "";
-      if (Platform.OS === "web") {
-        entryContent = window.localStorage.getItem(entryPath) || "";
-      } else {
-        entryContent = await FileSystem.readAsStringAsync(entryPath);
-      }
-      try {
-        // Try to parse as JSON, if it fails, it's an old format
-        const parsedContent = JSON.parse(entryContent);
-        // Show all fields for new format
-        setSelectedEntry({
-          type: "json",
-          date: parsedContent.date,
-          mood: parsedContent.mood,
-          tags: parsedContent.tags,
-          response: parsedContent.response,
-        });
-      } catch (e) {
-        // Old format, just show the raw text
-        setSelectedEntry({ type: "text", response: entryContent });
-      }
-    } catch (error) {
-      console.error("Failed to load diary entry:", error);
-      Alert.alert("Error", "Failed to load the selected diary entry");
-    }
+  const viewDiaryEntry = (diary) => {
+    setSelectedEntry({
+      type: "json",
+      date: diary.date,
+      mood: diary.mood,
+      tags: diary.tags || [],
+      response: diary.response || "",
+    });
   };
 
-  // Tab for writing new entries
-  const WriteTab = () => {
-    // Use local state instead of parent state
-    const [localDiaryEntry, setLocalDiaryEntry] = useState(diaryEntry);
-    const [localMoodValue, setLocalMoodValue] = useState(moodValue);
-    const [localSelectedTags, setLocalSelectedTags] = useState(selectedTags);
-    const textInputRef = React.useRef(null);
-
-    // Sync local state with parent state
-    useEffect(() => {
-      setLocalDiaryEntry(diaryEntry);
-    }, [diaryEntry]);
-
-    // Handle tag toggle locally
-    const toggleTagLocal = (tag) => {
-      setLocalSelectedTags((prevTags) =>
-        prevTags.includes(tag)
-          ? prevTags.filter((t) => t !== tag)
-          : [...prevTags, tag]
-      );
-    };
-
-    // Handle saving from local state
-    const handleSave = () => {
-      if (!localDiaryEntry.trim()) {
-        Alert.alert("Empty Entry", "Please write something before saving.");
-        return;
-      }
-      setDiaryEntry(localDiaryEntry);
-      setMoodValue(localMoodValue);
-      setSelectedTags(localSelectedTags);
-      // Save using the local values
-      saveDiaryWithContent(localDiaryEntry, localMoodValue, localSelectedTags);
-    };
-
-    return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.greeting}>Hello, {userName}!</Text>
-          <Text style={styles.date}>{date}</Text>
-        </View>
-
-        <View style={styles.promptContainer}>
-          <Text style={styles.promptText}>{prompt}</Text>
-        </View>
-
-        <View style={styles.diaryContainer}>
-          <TextInput
-            ref={textInputRef}
-            style={styles.diaryInput}
-            multiline={true}
-            placeholder="Write your thoughts here..."
-            value={localDiaryEntry}
-            onChangeText={setLocalDiaryEntry}
-            textAlignVertical="top"
-            autoFocus={false}
-            autoCorrect={false}
-            keyboardType="default"
-            blurOnSubmit={false}
-          />
-        </View>
-
-        {/* Mood Slider */}
-        <View style={styles.moodContainer}>
-          <Text style={styles.moodLabel}>
-            How are you feeling? (1-10): {localMoodValue}
-          </Text>
-          <Slider
-            style={{ width: "100%", height: 40 }}
-            minimumValue={1}
-            maximumValue={10}
-            step={1}
-            value={localMoodValue}
-            onValueChange={setLocalMoodValue}
-            minimumTrackTintColor="#007bff"
-            maximumTrackTintColor="#d3d3d3"
-          />
-        </View>
-
-        {/* Tags */}
-        <View style={styles.tagsContainer}>
-          <Text style={styles.tagsLabel}>Add tags:</Text>
-          <View style={styles.tagsWrapper}>
-            {availableTags.map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.tag,
-                  localSelectedTags.includes(tag) && styles.selectedTag,
-                ]}
-                onPress={() => toggleTagLocal(tag)}
-              >
-                <Text
-                  style={[
-                    styles.tagText,
-                    localSelectedTags.includes(tag) && styles.selectedTagText,
-                  ]}
-                >
-                  #{tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Entry</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    );
-  };
-
-  // Update saveDiaryWithContent to accept mood and tags
-  const saveDiaryWithContent = async (
-    content,
-    mood = moodValue,
-    tags = selectedTags
-  ) => {
-    if (!content.trim()) {
-      Alert.alert("Empty Entry", "Please write something before saving.");
-      return;
-    }
+  const handleSaveEntry = async ({ response, mood, tags }) => {
     try {
-      // Format date for filename and storage (always zero-padded)
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const day = String(now.getDate()).padStart(2, "0");
-      const hours = String(now.getHours()).padStart(2, "0");
-      const minutes = String(now.getMinutes()).padStart(2, "0");
-      const seconds = String(now.getSeconds()).padStart(2, "0");
-      const ms = String(now.getMilliseconds()).padStart(3, "0");
-      const formattedDate = `${year}-${month}-${day}`;
-      // Unique filename for each entry
-      const uniqueSuffix = `${hours}${minutes}${seconds}${ms}`;
-      const fileName = `diary-${formattedDate}-${uniqueSuffix}.json`;
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
-      // Create diary entry with header
-      const entryData = {
-        date: formattedDate, // always YYYY-MM-DD
-        prompt: prompt,
-        response: content,
-        mood: mood,
-        tags: tags,
-      };
-      const entryWithHeader = JSON.stringify(entryData);
-      if (Platform.OS === "web") {
-        window.localStorage.setItem(fileName, entryWithHeader);
-        await AsyncStorage.setItem("@last_diary_entry", content);
-        await AsyncStorage.setItem("@last_diary_date", formattedDate);
-      } else {
-        await FileSystem.writeAsStringAsync(filePath, entryWithHeader);
-        await AsyncStorage.setItem("@last_diary_entry", content);
-        await AsyncStorage.setItem("@last_diary_date", formattedDate);
-      }
+      await saveDiaryEntry({
+        prompt,
+        response,
+        mood,
+        tags: Array.isArray(tags) ? [...tags] : tags,
+      });
       const goToBrief = async () => {
         await requestBriefGeneration();
         navigation.navigate("Reports", { openInsights: true });
@@ -396,19 +292,16 @@ const HomeScreen = ({ navigation }) => {
           ]
         );
       }
-      setDiaryEntry(""); // Clear the input after saving
-      setSelectedTags([]); // Clear tags
-      setMoodValue(5); // Reset mood
-      // Reload diary entries to show the new one
       loadDiaryEntries();
+      return true;
     } catch (error) {
       console.error("Failed to save diary entry:", error);
       Alert.alert("Error", "Failed to save your diary entry");
+      return false;
     }
   };
 
-  // Tab for viewing diary history
-  const HistoryTab = () => (
+  const renderHistory = () => (
     <View style={styles.historyContainer}>
       {selectedEntry ? (
         <ScrollView style={styles.entryDetailContainer}>
@@ -453,15 +346,15 @@ const HomeScreen = ({ navigation }) => {
           ) : (
             <ScrollView style={styles.entriesListContainer}>
               {savedDiaries.length > 0 ? (
-                savedDiaries.map((diary, index) => (
+                savedDiaries.map((diary, diaryIndex) => (
                   <TouchableOpacity
-                    key={index}
+                    key={diary.name || diaryIndex}
                     style={styles.diaryItem}
-                    onPress={() => viewDiaryEntry(diary.path)}
+                    onPress={() => viewDiaryEntry(diary)}
                   >
                     <Text style={styles.diaryDate}>{diary.displayDate}</Text>
                     <Text style={styles.diarySize}>
-                      {Math.round(diary.size / 1024)} KB
+                      {formatDiarySize(diary.size)}
                     </Text>
                   </TouchableOpacity>
                 ))
@@ -481,20 +374,22 @@ const HomeScreen = ({ navigation }) => {
     </View>
   );
 
-  // Memoize the tabs to prevent unnecessary re-renders
-  const writeTab = React.useMemo(
-    () => WriteTab,
-    [diaryEntry, prompt, userName, date]
-  );
-  const historyTab = React.useMemo(
-    () => HistoryTab,
-    [savedDiaries, selectedEntry, isLoading]
-  );
-
-  const renderScene = SceneMap({
-    write: writeTab,
-    history: historyTab,
-  });
+  const renderScene = ({ route }) => {
+    if (route.key === "write") {
+      return (
+        <DiaryWriteTab
+          userName={userName}
+          date={date}
+          prompt={prompt}
+          onSave={handleSaveEntry}
+        />
+      );
+    }
+    if (route.key === "history") {
+      return renderHistory();
+    }
+    return null;
+  };
 
   return (
     <SafeAreaView style={styles.container}>

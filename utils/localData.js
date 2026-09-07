@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
+import { buildDiaryRecord, parseDiaryRecord } from "./sessionBriefLogic";
 
 export const STORAGE_KEYS = {
   userName: "@user_name",
@@ -85,18 +86,42 @@ export async function getDiaryEntries() {
     try {
       const raw = await readFile(file);
       if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      entries.push({
-        ...parsed,
-        source: "diary",
-        file,
-      });
+      entries.push(
+        parseDiaryRecord(raw, {
+          source: "diary",
+          file,
+          size: raw.length,
+        })
+      );
     } catch (error) {
       console.error("Failed to parse diary entry:", file, error);
     }
   }
   entries.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   return entries;
+}
+
+export async function saveDiaryEntry({
+  prompt = "",
+  response = "",
+  mood,
+  tags,
+} = {}) {
+  const now = new Date();
+  const date = getFormattedDate(now);
+  const fileName = `diary-${date}-${getUniqueStamp(now)}.json`;
+  const record = buildDiaryRecord({
+    date,
+    prompt,
+    response,
+    mood,
+    tags,
+  });
+  const serialized = JSON.stringify(record);
+  await writeFile(fileName, serialized);
+  await AsyncStorage.setItem("@last_diary_entry", record.response);
+  await AsyncStorage.setItem("@last_diary_date", date);
+  return { ...record, file: fileName, size: serialized.length };
 }
 
 export async function getChatReports() {

@@ -1,5 +1,7 @@
 "use strict";
 
+const MOOD_SCALE_MIN = 1;
+const MOOD_SCALE_MAX = 10;
 const LOW_MOOD_THRESHOLD = 4;
 const OBSERVATIONAL_PATTERNS = [
   {
@@ -129,6 +131,125 @@ function asText(value) {
   return String(value || "").trim();
 }
 
+function normalizeMood(raw) {
+  if (raw == null || raw === "") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  return value;
+}
+
+function normalizeTags(raw) {
+  if (raw == null || raw === "") return [];
+  if (Array.isArray(raw)) {
+    return uniqueStrings(raw.flatMap((item) => normalizeTags(item)));
+  }
+  if (typeof raw === "object") {
+    const trueKeys = Object.entries(raw)
+      .filter(([, value]) => value === true)
+      .map(([key]) => asText(key).replace(/^#/, ""));
+    if (trueKeys.length > 0) return uniqueStrings(trueKeys);
+    return uniqueStrings(
+      Object.values(raw).flatMap((item) => normalizeTags(item))
+    );
+  }
+  if (typeof raw !== "string") return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (
+    (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+    (trimmed.startsWith("{") && trimmed.endsWith("}"))
+  ) {
+    try {
+      return normalizeTags(JSON.parse(trimmed));
+    } catch {
+      // Fall through to comma splitting.
+    }
+  }
+  return uniqueStrings(
+    trimmed
+      .split(/[,]+/)
+      .map((part) => part.replace(/^[#\s]+|[.\s]+$/g, "").trim())
+      .filter(Boolean)
+  );
+}
+
+function buildDiaryRecord({
+  date,
+  prompt = "",
+  response = "",
+  mood,
+  tags,
+} = {}) {
+  return {
+    date,
+    prompt: String(prompt || ""),
+    response: String(response || ""),
+    mood: normalizeMood(mood),
+    tags: normalizeTags(tags),
+  };
+}
+
+function parseDiaryRecord(raw, extra = {}) {
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw || {};
+  return {
+    ...parsed,
+    ...extra,
+    date: parsed.date || extra.date || "",
+    prompt: parsed.prompt || "",
+    response: parsed.response || "",
+    mood: normalizeMood(parsed.mood),
+    tags: normalizeTags(parsed.tags ?? parsed.selectedTags ?? parsed.tag),
+  };
+}
+
+function moodScaleDescriptor() {
+  return {
+    min: MOOD_SCALE_MIN,
+    max: MOOD_SCALE_MAX,
+    label: `self-rated journal mood ${MOOD_SCALE_MIN}-${MOOD_SCALE_MAX}`,
+    citation: `n/${MOOD_SCALE_MAX}`,
+  };
+}
+
+function constrainMoodScaleLanguage(text) {
+  const max = String(MOOD_SCALE_MAX);
+  return String(text || "")
+    .replace(/\b(\d{1,2})\s*\/\s*5\b/g, `$1/${max}`)
+    .replace(/\b(\d{1,2})\s+out of\s+5\b/gi, `$1 out of ${max}`)
+    .replace(/\b(\d{1,2})\s+out of\s+five\b/gi, `$1 out of ${max}`);
+}
+
+function buildSynthesisPrompt(analysis) {
+  return `Write a concise Session Brief for a psychiatrist using ONLY this on-device analysis. Do not invent diagnoses, scale scores, or events.
+
+Journal mood scale (mandatory):
+- Every value in moodTrajectory / moodSummary is a self-rated journal mood from ${MOOD_SCALE_MIN} (lowest) to ${MOOD_SCALE_MAX} (highest).
+- Cite mood only as n/${MOOD_SCALE_MAX} (example: 3/${MOOD_SCALE_MAX}).
+- Never rescale, convert, or describe mood as x/5, "out of 5", "/5", or a 5-point scale.
+- A stored score of 3 means 3/${MOOD_SCALE_MAX}, not 3/5.
+
+Diary tags:
+- tagFrequency counts tags the teen selected on journal entries (school, family, friends, anxiety, procrastination, lonely, etc.).
+- Use only those tags. If tagFrequency is empty, say no diary tags were selected.
+
+Structured observations:
+${JSON.stringify(analysis, null, 2)}
+
+Required markdown sections:
+## Mood trajectory
+## Recurring themes
+## Stressors on lower-mood days
+## Notable quote
+## Observational signals from user-reported text
+## Suggested opening questions
+
+Rules:
+- Mood numbers may be cited only if present in moodTrajectory / moodSummary, and only on the ${MOOD_SCALE_MIN}-${MOOD_SCALE_MAX} journal scale.
+- Observational signals are keyword mentions, not PHQ-9 or HAM scores.
+- If a section has no data, say it is not available from on-device data.
+- End with a one-line reminder that this is not a diagnosis.`;
+}
+
 function collectUserTexts({ entries = [], checkIns = [], summaries = [] }) {
   const texts = [];
   entries.forEach((entry) => {
@@ -137,8 +258,8 @@ function collectUserTexts({ entries = [], checkIns = [], summaries = [] }) {
         source: "diary",
         date: entry.date,
         text: asText(entry.response),
-        mood: entry.mood,
-        tags: entry.tags || [],
+        mood: normalizeMood(entry.mood),
+        tags: normalizeTags(entry.tags ?? entry.selectedTags ?? entry.tag),
       });
     }
   });
@@ -167,11 +288,11 @@ function collectUserTexts({ entries = [], checkIns = [], summaries = [] }) {
 
 function getMoodTrajectory(entries = []) {
   return entries
-    .filter((entry) => entry.mood != null && entry.date)
     .map((entry) => ({
       date: entry.date,
-      mood: Number(entry.mood),
+      mood: normalizeMood(entry.mood),
     }))
+    .filter((entry) => entry.mood != null && entry.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
@@ -208,10 +329,8 @@ function summarizeMood(trajectory) {
 function getTagFrequency(entries = []) {
   const tagCounts = {};
   entries.forEach((entry) => {
-    (entry.tags || []).forEach((tag) => {
-      const key = String(tag).replace(/^#/, "");
-      if (!key) return;
-      tagCounts[key] = (tagCounts[key] || 0) + 1;
+    normalizeTags(entry.tags ?? entry.selectedTags ?? entry.tag).forEach((tag) => {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
   return tagCounts;
@@ -323,7 +442,7 @@ function lowMoodStressors(entries = []) {
     date: entry.date,
     mood: entry.mood,
     text: asText(entry.response).slice(0, 160),
-    tags: entry.tags || [],
+    tags: normalizeTags(entry.tags ?? entry.selectedTags ?? entry.tag),
   }));
   const topTags = Object.entries(tags)
     .sort((a, b) => b[1] - a[1])
@@ -364,6 +483,7 @@ function analyzeLocalSignals({
       checkIns: checkIns.length,
       chatReports: summaries.length,
     },
+    moodScale: moodScaleDescriptor(),
     moodTrajectory,
     moodSummary,
     tagFrequency,
@@ -415,7 +535,7 @@ function buildMockSessionBrief(analysis, { reason } = {}) {
     .join("\n");
   const moodLine =
     moodSummary.count > 0
-      ? `Self-rated journal mood across ${moodSummary.count} day(s): average ${moodSummary.average}/10 (range ${moodSummary.min}–${moodSummary.max}). ${moodSummary.trend}`
+      ? `Self-rated journal mood across ${moodSummary.count} day(s): average ${moodSummary.average}/${MOOD_SCALE_MAX} (range ${moodSummary.min}–${moodSummary.max}). ${moodSummary.trend}`
       : "No journal mood scores are stored yet.";
 
   return [
@@ -438,7 +558,7 @@ function formatSessionBriefMarkdown(analysis, narrative) {
   const moodLines =
     (analysis.moodTrajectory || []).length > 0
       ? analysis.moodTrajectory
-          .map((item) => `- ${item.date}: ${item.mood}/10`)
+          .map((item) => `- ${item.date}: ${item.mood}/${MOOD_SCALE_MAX}`)
           .join("\n")
       : "- No journal mood scores available.";
   const themeLines =
@@ -465,9 +585,10 @@ function formatSessionBriefMarkdown(analysis, narrative) {
     `Sources: ${sources.diaryEntries || 0} journal entries, ${sources.checkIns || 0} check-ins, ${sources.chatReports || 0} chat reports.`,
     "",
     `## Mood trajectory`,
+    `Journal mood is self-rated ${MOOD_SCALE_MIN}–${MOOD_SCALE_MAX} (never a 5-point scale).`,
     moodLines,
     analysis.moodSummary?.count
-      ? `Average ${analysis.moodSummary.average}/10 (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
+      ? `Average ${analysis.moodSummary.average}/${MOOD_SCALE_MAX} (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
       : "",
     "",
     `## Recurring themes`,
@@ -548,7 +669,15 @@ function buildLocalKeyPoints(cleanedMessages = []) {
 }
 
 module.exports = {
+  MOOD_SCALE_MIN,
+  MOOD_SCALE_MAX,
   LOW_MOOD_THRESHOLD,
+  normalizeMood,
+  normalizeTags,
+  buildDiaryRecord,
+  parseDiaryRecord,
+  constrainMoodScaleLanguage,
+  buildSynthesisPrompt,
   analyzeLocalSignals,
   buildMockSessionBrief,
   buildOpeningQuestions,

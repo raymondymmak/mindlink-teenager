@@ -173,7 +173,7 @@ const InsightScreen = () => {
             </Text>
             <Text style={styles.sectionContent}>
               {analysis.moodSummary.count > 0
-                ? `Self-rated mood: avg ${analysis.moodSummary.average}/10 (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
+                ? `Self-rated mood (1–10): avg ${analysis.moodSummary.average}/10 (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
                 : "No self-rated mood scores stored yet."}
             </Text>
           </View>
