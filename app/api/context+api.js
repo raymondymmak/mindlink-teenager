@@ -4,6 +4,13 @@ function json(body, status = 200) {
   return Response.json(body, { status });
 }
 
+export async function GET() {
+  return json(
+    { error: "POST a JSON body with { query }", context: "", matches: [] },
+    405
+  );
+}
+
 export async function POST(request) {
   let body = {};
   try {
