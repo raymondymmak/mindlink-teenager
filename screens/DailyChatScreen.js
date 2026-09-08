@@ -68,13 +68,6 @@ const DailyChatScreen = ({ navigation }) => {
   // Helper function to create unique IDs - simplified to use just Date.now()
   const createUniqueId = (prefix) => `${prefix}-${Date.now()}`;
 
-  // Set up the header with a button
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: null, // Remove the "View Report" button
-    });
-  }, [navigation]);
-
   // Fetch user name and load messages
   useEffect(() => {
     const fetchUserName = async () => {
