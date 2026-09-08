@@ -1,8 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Verified against Google AI Studio ListModels + generateContent (Sep 2026).
-// gemini-2.0-flash is retired; Google currently redirects new callers to this id.
-export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+// Gemini Developer API has no "auto" model id. `auto` is in-app routing:
+// chat / check-ins / key points → Flash-Lite; Session Brief → Flash.
+// gemini-3.6-flash is still valid but currently quota-exhausted on this key.
+export const GEMINI_LITE_MODEL = "gemini-3.5-flash-lite";
+export const GEMINI_STANDARD_MODEL = "gemini-3.5-flash";
+export const DEFAULT_GEMINI_MODEL = "auto";
 const GEMINI_REST_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -16,11 +19,24 @@ export function getGeminiApiKey() {
   return key;
 }
 
+function envModelOverride() {
+  return (process.env.EXPO_PUBLIC_GEMINI_MODEL || DEFAULT_GEMINI_MODEL).trim();
+}
+
+export function isAutoGeminiRouting(value = envModelOverride()) {
+  return !value || value.toLowerCase() === "auto";
+}
+
+export function resolveGeminiModel(task = "chat") {
+  const override = envModelOverride();
+  if (!isAutoGeminiRouting(override)) {
+    return override;
+  }
+  return task === "brief" ? GEMINI_STANDARD_MODEL : GEMINI_LITE_MODEL;
+}
+
 export function getGeminiModel() {
-  return (
-    process.env.EXPO_PUBLIC_GEMINI_MODEL ||
-    DEFAULT_GEMINI_MODEL
-  ).trim();
+  return resolveGeminiModel("chat");
 }
 
 export function isGeminiConfigured() {
@@ -33,6 +49,19 @@ export function missingApiKeyError() {
   );
   error.code = "MISSING_API_KEY";
   return error;
+}
+
+function isRetryableGeminiError(error) {
+  const status = error?.status;
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    status === 429 ||
+    status === 503 ||
+    message.includes("exceeded your current quota") ||
+    message.includes("resource_exhausted") ||
+    message.includes("high demand") ||
+    message.includes("unavailable")
+  );
 }
 
 function normalizeContents(contents) {
@@ -129,46 +158,72 @@ async function generateWithRest({
  * Call the Gemini Developer API directly from the Expo app.
  * Prefers `@google/genai`; falls back to the official REST endpoint if the
  * SDK cannot run in this environment (common on React Native).
+ *
+ * task: "chat" (Flash-Lite) or "brief" (Flash). Ignored when
+ * EXPO_PUBLIC_GEMINI_MODEL is a specific model id.
  */
 export async function generateGeminiText({
   contents,
   systemInstruction,
+  task = "chat",
 } = {}) {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw missingApiKeyError();
   }
 
-  const model = getGeminiModel();
+  const preferred = resolveGeminiModel(task);
+  const models = [preferred];
+  if (isAutoGeminiRouting() && task === "brief" && preferred !== GEMINI_LITE_MODEL) {
+    models.push(GEMINI_LITE_MODEL);
+  }
+
   const normalized = normalizeContents(contents);
   if (normalized.length === 0) {
     throw new Error("No conversation content was provided to Gemini.");
   }
 
-  try {
-    const text = await generateWithSdk({
-      apiKey,
-      model,
-      contents: normalized,
-      systemInstruction,
-    });
-    if (text) return text;
-    throw new Error("Gemini SDK returned an empty response.");
-  } catch (sdkError) {
-    if (sdkError?.code === "MISSING_API_KEY") {
-      throw sdkError;
+  let lastError;
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    try {
+      const text = await generateWithSdk({
+        apiKey,
+        model,
+        contents: normalized,
+        systemInstruction,
+      });
+      if (text) return text;
+      throw new Error("Gemini SDK returned an empty response.");
+    } catch (sdkError) {
+      if (sdkError?.code === "MISSING_API_KEY") {
+        throw sdkError;
+      }
+      try {
+        return await generateWithRest({
+          apiKey,
+          model,
+          contents: normalized,
+          systemInstruction,
+        });
+      } catch (restError) {
+        lastError = restError;
+        const hasFallback = index < models.length - 1;
+        if (!hasFallback || !isRetryableGeminiError(restError)) {
+          throw restError;
+        }
+      }
     }
-    return generateWithRest({
-      apiKey,
-      model,
-      contents: normalized,
-      systemInstruction,
-    });
   }
+  throw lastError || new Error("Gemini request failed.");
 }
 
 export function getGeminiStatusLabel() {
-  return isGeminiConfigured()
-    ? `Gemini (${getGeminiModel()})`
-    : "Local demo (no API key)";
+  if (!isGeminiConfigured()) {
+    return "Local demo (no API key)";
+  }
+  if (isAutoGeminiRouting()) {
+    return `Gemini auto (chat: ${GEMINI_LITE_MODEL} · brief: ${GEMINI_STANDARD_MODEL})`;
+  }
+  return `Gemini (${resolveGeminiModel("chat")})`;
 }

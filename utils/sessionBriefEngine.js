@@ -56,6 +56,7 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
         await generateGeminiText({
           contents: buildSynthesisPrompt(analysis),
           systemInstruction,
+          task: "brief",
         })
       );
       mode = "gemini";

@@ -46,7 +46,7 @@ Same as above. Chat uses Gemini Flash directly. Before each chat turn or Session
 ### Privacy
 
 - Journal entries, check-ins, chat reports, and Session Briefs are stored on-device (`AsyncStorage` / `localStorage` on web, `expo-file-system` on native).
-- When a Gemini key is set, the app calls the **Gemini Developer API directly** (`gemini-3.6-flash` by default). Chat completions are not proxied.
+- When a Gemini key is set, the app calls the **Gemini Developer API directly**. Chat uses **Gemini 3.5 Flash-Lite**; Session Brief uses **Gemini 3.5 Flash** (and falls back to Lite, then the on-device narrative, if Flash is rate-limited). There is no Gemini Developer API "Auto" model id — `EXPO_PUBLIC_GEMINI_MODEL=auto` is this in-app split.
 - Clinical procedure snippets come from **this repo's** `POST /api/context` (EAS Hosting API route). The Expo client never embeds `PINECONE_KEY` or talks to Pinecone.
 - Payloads to Gemini are the current chat turn or the already-computed Session Brief observations, plus optional retrieved context in the system preamble.
 - Without a key, brief generation stays on-device.
@@ -57,7 +57,7 @@ This Expo 53 app reads:
 
 ```bash
 EXPO_PUBLIC_GEMINI_API_KEY=your_key_here
-EXPO_PUBLIC_GEMINI_MODEL=gemini-3.6-flash
+EXPO_PUBLIC_GEMINI_MODEL=auto
 ```
 
 1. Create a key in [Google AI Studio](https://aistudio.google.com/apikey).
@@ -68,12 +68,12 @@ Expo web only inlines `EXPO_PUBLIC_*` variables. For EAS Hosting, export the web
 
 ```bash
 EXPO_PUBLIC_GEMINI_API_KEY="$GEMINI_KEY" \
-EXPO_PUBLIC_GEMINI_MODEL="${EXPO_PUBLIC_GEMINI_MODEL:-gemini-3.6-flash}" \
+EXPO_PUBLIC_GEMINI_MODEL="${EXPO_PUBLIC_GEMINI_MODEL:-auto}" \
   npx expo export -p web
 npx eas-cli deploy --prod --non-interactive --environment production
 ```
 
-`gemini-2.0-flash` is no longer available. The default is `gemini-3.6-flash` (override with `EXPO_PUBLIC_GEMINI_MODEL`). If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
+`gemini-2.0-flash` is no longer available. Default routing is `auto`: chat/check-ins on `gemini-3.5-flash-lite`, Session Brief on `gemini-3.5-flash`. Pin `EXPO_PUBLIC_GEMINI_MODEL` to a specific id (including `gemini-3.6-flash`) to override. If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
 
 The client prefers `@google/genai` and falls back to the official REST endpoint (`generativelanguage.googleapis.com`) if the SDK cannot run in React Native. Never hardcode the key in source.
 
