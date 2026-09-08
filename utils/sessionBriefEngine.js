@@ -3,14 +3,19 @@ import {
   withClinicalContext,
 } from "./contextApi";
 import { generateGeminiText, isGeminiConfigured } from "./geminiClient";
-import { SYSTEM_INSTRUCTION_SESSION_BRIEF } from "./systemInstruction";
+import {
+  SYSTEM_INSTRUCTION_SESSION_BRIEF,
+  SYSTEM_INSTRUCTION_SUMMARY,
+} from "./systemInstruction";
 import {
   analyzeLocalSignals,
-  buildMockSessionBrief,
+  buildLocalReportSections,
   buildSynthesisPrompt,
   constrainMoodScaleLanguage,
+  formatReportSectionsMarkdown,
   formatSessionBriefMarkdown,
   hasEnoughBriefData,
+  parseStructuredBrief,
 } from "./sessionBriefLogic";
 import {
   getCheckIns,
@@ -20,6 +25,18 @@ import {
   getUserName,
   saveSessionBriefRecord,
 } from "./localData";
+
+function sessionBriefSystemInstruction() {
+  return `${SYSTEM_INSTRUCTION_SUMMARY}\n\n${SYSTEM_INSTRUCTION_SESSION_BRIEF}`;
+}
+
+function applyMoodConstraintToSections(sections) {
+  const next = {};
+  Object.entries(sections || {}).forEach(([key, value]) => {
+    next[key] = constrainMoodScaleLanguage(value);
+  });
+  return next;
+}
 
 export async function loadSessionBriefInputs() {
   const [entries, checkIns, summaries, userName] = await Promise.all([
@@ -43,52 +60,56 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
 
   const analysis = analyzeLocalSignals(inputs);
   let mode = "local-demo";
-  let narrative;
+  let sections;
+  let rawFallback = "";
   let warning = null;
 
   if (!forceLocal && isGeminiConfigured()) {
     try {
       const { systemInstruction } = await withClinicalContext(
-        SYSTEM_INSTRUCTION_SESSION_BRIEF,
+        sessionBriefSystemInstruction(),
         buildContextQueryFromAnalysis(analysis)
       );
-      narrative = constrainMoodScaleLanguage(
-        await generateGeminiText({
-          contents: buildSynthesisPrompt(analysis),
-          systemInstruction,
-          task: "brief",
-        })
-      );
+      const raw = await generateGeminiText({
+        contents: buildSynthesisPrompt(analysis),
+        systemInstruction,
+        task: "brief",
+      });
+      const parsed = parseStructuredBrief(raw);
+      sections = applyMoodConstraintToSections(parsed.sections);
+      rawFallback = constrainMoodScaleLanguage(parsed.rawFallback || "");
       mode = "gemini";
     } catch (error) {
       warning =
         error?.code === "MISSING_API_KEY"
           ? error.message
           : `Gemini was unavailable (${error.message}). Showing an on-device demo brief instead.`;
-      narrative = constrainMoodScaleLanguage(
-        buildMockSessionBrief(analysis, {
-          reason: "Gemini fallback",
-        })
-      );
+      sections = buildLocalReportSections(analysis, {
+        reason: "Gemini fallback",
+      });
     }
   } else {
     warning = isGeminiConfigured()
       ? null
       : "No EXPO_PUBLIC_GEMINI_API_KEY found. This is an on-device demo brief using the same clinician structure.";
-    narrative = constrainMoodScaleLanguage(
-      buildMockSessionBrief(analysis, {
-        reason: "API key not configured",
-      })
-    );
+    sections = buildLocalReportSections(analysis, {
+      reason: "API key not configured",
+    });
   }
 
-  const markdown = formatSessionBriefMarkdown(analysis, narrative);
+  const narrative = formatReportSectionsMarkdown(sections);
+  const markdown = formatSessionBriefMarkdown(analysis, {
+    sections,
+    rawFallback,
+  });
   const record = await saveSessionBriefRecord({
     mode,
     warning,
     markdown,
     analysis,
     narrative,
+    sections,
+    rawFallback,
   });
 
   return record;

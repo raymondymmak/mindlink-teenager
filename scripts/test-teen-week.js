@@ -102,11 +102,13 @@ function testSameLocalDataFeedsClinicianBrief() {
 
   assert.strictEqual(card.entryCount, analysis.dataSources.diaryEntries);
   assert.ok(markdown.includes("# Session Brief"));
-  assert.ok(markdown.includes("## Mood trajectory"));
+  assert.ok(markdown.includes("## 1. User Profile"));
+  assert.ok(markdown.includes("## 11. Suggestions for User"));
+  assert.ok(markdown.includes("### Mood trajectory"));
   assert.ok(markdown.includes("3/10"));
   assert.ok(markdown.includes("7/10"));
   assert.ok(analysis.tagFrequency.school >= 1);
-  assert.ok(/not a PHQ-9/i.test(markdown));
+  assert.ok(/not a PHQ-9|not a clinical assessment/i.test(markdown));
   assert.ok(!/\bPHQ-9:\s*\d/i.test(markdown));
 }
 

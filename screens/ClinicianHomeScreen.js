@@ -18,9 +18,54 @@ import {
 import {
   analyzeLocalSignals,
   hasEnoughBriefData,
+  NOT_DISCLOSED,
+  parseStructuredBrief,
+  REPORT_SECTIONS,
 } from "../utils/sessionBriefLogic";
 import { consumePendingBriefGeneration } from "../utils/localData";
 import { shareOrCopyText } from "../utils/shareText";
+
+const SCALE_SECTIONS = new Set(["presentingConcerns", "anxietyStressLevels"]);
+
+function resolveBriefSections(brief) {
+  if (brief?.sections) {
+    return {
+      sections: brief.sections,
+      rawFallback: brief.rawFallback || "",
+    };
+  }
+  if (brief?.narrative) {
+    return parseStructuredBrief(brief.narrative);
+  }
+  return { sections: null, rawFallback: "" };
+}
+
+function ReportSectionCard({ section, body }) {
+  const empty = !body || body === NOT_DISCLOSED;
+  return (
+    <View style={styles.reportCard}>
+      <View style={styles.reportCardHeader}>
+        <View style={styles.reportNumber}>
+          <Text style={styles.reportNumberText}>{section.number}</Text>
+        </View>
+        <Text style={styles.reportCardTitle}>{section.title}</Text>
+      </View>
+      {SCALE_SECTIONS.has(section.id) ? (
+        <Text style={styles.scaleDisclaimer}>
+          HAM-D / HAM-A figures, if shown, are preliminary and
+          conversation-derived — not administered instruments or diagnoses.
+        </Text>
+      ) : null}
+      {empty ? (
+        <Text style={[styles.reportCardBody, styles.reportCardEmpty]}>
+          {NOT_DISCLOSED}
+        </Text>
+      ) : (
+        <Markdown style={markdownStyles}>{body}</Markdown>
+      )}
+    </View>
+  );
+}
 
 function Panel({ title, children }) {
   return (
@@ -107,6 +152,7 @@ export default function ClinicianHomeScreen() {
   const quote = liveAnalysis?.criticalQuote?.quote;
   const stressors = liveAnalysis?.correlations;
   const excerpts = stressors?.excerpts || [];
+  const structuredBrief = resolveBriefSections(brief);
 
   const briefColumn = (
     <ScrollView
@@ -239,10 +285,32 @@ export default function ClinicianHomeScreen() {
         </>
       ) : null}
 
-      {brief?.narrative ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Clinician notes</Text>
-          <Markdown style={markdownStyles}>{brief.narrative}</Markdown>
+      {brief ? (
+        <View style={styles.reportBlock}>
+          <Text style={styles.sectionTitle}>Preliminary clinician report</Text>
+          <Text style={styles.finePrint}>
+            Same 11-section harness on every regenerate. Missing evidence stays
+            “Not disclosed in conversation” — the layout does not reshuffle.
+          </Text>
+          {REPORT_SECTIONS.map((section) => (
+            <ReportSectionCard
+              key={section.id}
+              section={section}
+              body={structuredBrief.sections?.[section.id]}
+            />
+          ))}
+          {structuredBrief.rawFallback ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Unstructured model notes</Text>
+              <Text style={styles.finePrint}>
+                The model did not return parseable 11-section JSON. Scaffold
+                above is unchanged.
+              </Text>
+              <Markdown style={markdownStyles}>
+                {structuredBrief.rawFallback}
+              </Markdown>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </ScrollView>
@@ -557,5 +625,56 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: "#f8f9fa",
     borderRadius: 5,
+  },
+  reportBlock: {
+    marginBottom: 8,
+  },
+  reportCard: {
+    marginBottom: 10,
+    padding: 14,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d5dee7",
+  },
+  reportCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  reportNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#007bff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportNumberText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  reportCardTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2e4057",
+  },
+  reportCardBody: {
+    fontSize: 15,
+    color: "#333",
+    lineHeight: 22,
+  },
+  reportCardEmpty: {
+    color: "#7a8694",
+    fontStyle: "italic",
+  },
+  scaleDisclaimer: {
+    fontSize: 12,
+    color: "#5b6b7c",
+    lineHeight: 17,
+    marginBottom: 8,
   },
 });

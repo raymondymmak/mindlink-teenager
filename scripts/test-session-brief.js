@@ -7,6 +7,7 @@ const {
   buildLocalChatReport,
   buildLocalKeyPoints,
   buildDiaryRecord,
+  buildLocalReportSections,
   buildSynthesisPrompt,
   constrainMoodScaleLanguage,
   formatSessionBriefMarkdown,
@@ -14,6 +15,9 @@ const {
   getTagFrequency,
   normalizeTags,
   parseDiaryRecord,
+  parseStructuredBrief,
+  REPORT_SECTIONS,
+  NOT_DISCLOSED,
 } = require("../utils/sessionBriefLogic");
 
 function testMoodAndTags() {
@@ -64,26 +68,84 @@ function testMoodAndTags() {
   return analysis;
 }
 
+function assertElevenSectionScaffold(text) {
+  REPORT_SECTIONS.forEach((section) => {
+    assert.ok(
+      text.includes(`## ${section.number}. ${section.title}`),
+      `missing section ${section.number}. ${section.title}`
+    );
+  });
+}
+
 function testMockBrief(analysis) {
   const narrative = buildMockSessionBrief(analysis, { reason: "unit test" });
-  assert.ok(narrative.includes("Suggested opening questions"));
+  assertElevenSectionScaffold(narrative);
   assert.ok(narrative.includes("Alex"));
-  assert.ok(!/HAM-A|Hamilton/.test(narrative));
+  assert.ok(/preliminary|conversation-derived|Insufficient data/i.test(narrative));
+  assert.ok(!/HAM-A:\s*\d+/i.test(narrative));
+  assert.ok(!/HAM-D:\s*\d+/i.test(narrative));
   assert.ok(narrative.includes("/10"));
   assert.ok(!/out of 5/.test(narrative));
   assert.ok(!/\b\/5\b/.test(narrative));
   assert.ok((analysis.openingQuestions || []).length >= 2);
 
-  const markdown = formatSessionBriefMarkdown(analysis, narrative);
+  const sections = buildLocalReportSections(analysis, { reason: "unit test" });
+  assert.strictEqual(Object.keys(sections).length, 11);
+  assert.ok(sections.userProfile.includes("Alex"));
+  assert.ok(sections.userProfile.includes(NOT_DISCLOSED));
+  assert.ok(sections.moodAffectiveState.includes("3/10") || sections.moodAffectiveState.includes("/10"));
+
+  const markdown = formatSessionBriefMarkdown(analysis, sections);
   assert.ok(markdown.startsWith("# Session Brief"));
-  assert.ok(markdown.includes("## Mood trajectory"));
-  assert.ok(markdown.includes("## Recurring themes"));
-  assert.ok(markdown.includes("## Stressors on lower-mood days"));
-  assert.ok(markdown.includes("## Notable quote"));
-  assert.ok(markdown.includes("Observational signals"));
+  assertElevenSectionScaffold(markdown);
   assert.ok(markdown.includes("Preferred name: Alex"));
   assert.ok(markdown.includes("not a clinical assessment"));
-  assert.ok(!/HAM-A|Hamilton/.test(markdown));
+  assert.ok(markdown.includes("Appendix — local source panels"));
+  assert.ok(markdown.includes("### Mood trajectory"));
+  assert.ok(!/HAM-A:\s*\d+/i.test(markdown));
+}
+
+function testStructuredParseKeepsScaffold() {
+  const json = JSON.stringify({
+    userProfile: "Age 16, stated.",
+    presentingConcerns: "Exam stress. Preliminary HAM-D 8 / HAM-A 10, conversation-derived only.",
+    moodAffectiveState: "Low mood; journal 3/10.",
+    anxietyStressLevels: "Worry about school.",
+    extraIgnored: "should not become a twelfth section",
+  });
+  const parsed = parseStructuredBrief(json);
+  assert.strictEqual(parsed.filled, 4);
+  assert.strictEqual(parsed.sections.userProfile, "Age 16, stated.");
+  assert.strictEqual(parsed.sections.functioning, NOT_DISCLOSED);
+  assert.strictEqual(parsed.rawFallback, "");
+
+  const markdown = `
+## 1. User Profile
+Preferred name only.
+
+## 2. Presenting Concerns
+School pressure.
+
+## 3. Mood & Affective State
+Anxious, tired.
+
+## 6. Functioning
+Hard to keep up in class.
+
+## 8. Risk Assessment
+No SI disclosed.
+`;
+  const fromMd = parseStructuredBrief(markdown);
+  assert.ok(fromMd.filled >= 4);
+  assert.ok(fromMd.sections.userProfile.includes("Preferred name"));
+  assert.strictEqual(fromMd.sections.suggestionsForUser, NOT_DISCLOSED);
+
+  const blob = parseStructuredBrief("Just a wall of freeform clinician notes.");
+  assert.strictEqual(blob.filled, 0);
+  assert.ok(blob.rawFallback.includes("freeform"));
+  REPORT_SECTIONS.forEach((section) => {
+    assert.strictEqual(blob.sections[section.id], NOT_DISCLOSED);
+  });
 }
 
 function testEmptyState() {
@@ -174,6 +236,10 @@ function testDiarySaveShowsInBrief() {
   assert.ok(prompt.includes("1") && prompt.includes("10"));
   assert.ok(prompt.includes("Never rescale"));
   assert.ok(prompt.includes("not 3/5"));
+  assert.ok(prompt.includes("userProfile"));
+  assert.ok(prompt.includes("presentingConcerns"));
+  assert.ok(prompt.includes("suggestionsForUser"));
+  assert.ok(prompt.includes("11-section"));
   assert.ok(!/cite mood as n\/5/i.test(prompt));
 }
 
@@ -192,12 +258,31 @@ function testMoodScaleCopyNeverUsesOutOfFive() {
     path.join(__dirname, "../utils/systemInstruction.js"),
     "utf8"
   );
+  const summaryBlock = instruction.slice(
+    instruction.indexOf("SYSTEM_INSTRUCTION_SUMMARY"),
+    instruction.indexOf("SYSTEM_INSTRUCTION_SESSION_BRIEF")
+  );
+  assert.ok(summaryBlock.includes("User Profile"));
+  assert.ok(summaryBlock.includes("Presenting Concerns"));
+  assert.ok(summaryBlock.includes("Mood & Affective State"));
+  assert.ok(summaryBlock.includes("Anxiety & Stress Levels"));
+  assert.ok(summaryBlock.includes("Cognitive & Perceptual State"));
+  assert.ok(summaryBlock.includes("HEADSS Contextual Factors"));
+  assert.ok(summaryBlock.includes("Risk Assessment"));
+  assert.ok(summaryBlock.includes("Strengths & Protective Factors"));
+  assert.ok(summaryBlock.includes("Key Insights & Potential Areas of Concern"));
+  assert.ok(summaryBlock.includes("Suggestions for User"));
+  assert.ok(summaryBlock.includes("Hamilton Depression Scale"));
+  assert.ok(summaryBlock.includes("HAM-A"));
+
   const briefBlock = instruction.slice(
     instruction.indexOf("SYSTEM_INSTRUCTION_SESSION_BRIEF")
   );
   assert.ok(briefBlock.includes("n/10"));
   assert.ok(briefBlock.includes("not 3/5"));
   assert.ok(briefBlock.includes("Never rescale mood to a 5-point scale"));
+  assert.ok(briefBlock.includes("userProfile"));
+  assert.ok(briefBlock.includes("Not disclosed in conversation"));
 }
 
 function testChatFallbacks() {
@@ -219,6 +304,7 @@ function testChatFallbacks() {
 function main() {
   const analysis = testMoodAndTags();
   testMockBrief(analysis);
+  testStructuredParseKeepsScaffold();
   testEmptyState();
   testChatFallbacks();
   testTagNormalizationAndPersistence();
