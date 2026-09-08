@@ -44,7 +44,7 @@ import JourneyContinuesScreen from "./screens/JourneyContinuesScreen";
 import MyWeekScreen from "./screens/MyWeekScreen";
 import ClinicianHomeScreen from "./screens/ClinicianHomeScreen";
 import DemoHeaderActions from "./components/DemoHeaderActions";
-import { AppModeProvider, useAppMode } from "./src/AppModeContext";
+import { AppModeProvider, useAppMode } from "./components/AppModeContext";
 import { APP_MODES } from "./utils/appMode";
 
 const Stack = createStackNavigator();

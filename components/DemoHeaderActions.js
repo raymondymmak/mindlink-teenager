@@ -1,7 +1,7 @@
 import React from "react";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useAppMode } from "../src/AppModeContext";
+import { useAppMode } from "./AppModeContext";
 import { APP_MODES, modeToggleLabel } from "../utils/appMode";
 
 export default function DemoHeaderActions({ navigation }) {
