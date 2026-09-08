@@ -283,7 +283,7 @@ const InitChatScreen = ({ navigation }) => {
             {
               text: `Hello ${storedName}, welcome to MindLink!
 
-I'm here to be your personal, private guide for exploring your emotions and mental well-being. To start, we'll have a gentle chat to help me understand how best to support you. When you've shared enough, press **"Finish early"** to wrap up and see your first summary.
+I'm here to be your personal, private guide for exploring your emotions and mental well-being. To start, we'll have a gentle chat to help me understand how best to support you. When you've shared enough, you will automatically move on to your first summary; press **"Finish early"** to wrap up earlier.
 
 Individual conversations will **never** be stored, and summaries and insights are stored securely and locally on your device only. We will **never** share your personal data without your explicit consent! This is a safe, confidential space just for you. By continuing, you agree to our terms of service and privacy policy.
 
