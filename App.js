@@ -2,7 +2,7 @@
 // npx expo export --platform web => eas deploy => eas deploy --prod
 // npx expo start --tunnel
 
-import React from "react";
+import React, { useEffect } from "react";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Platform, TextInput } from "react-native";
@@ -49,6 +49,38 @@ import { APP_MODES } from "./utils/appMode";
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+function usePinWebPathToRoot() {
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") {
+      return undefined;
+    }
+    const originalPush = window.history.pushState.bind(window.history);
+    const originalReplace = window.history.replaceState.bind(window.history);
+    const pin = () => {
+      if (window.location.pathname !== "/") {
+        originalReplace(window.history.state, "", "/");
+      }
+    };
+    window.history.pushState = function pushStatePinned(...args) {
+      const result = originalPush(...args);
+      pin();
+      return result;
+    };
+    window.history.replaceState = function replaceStatePinned(...args) {
+      const result = originalReplace(...args);
+      pin();
+      return result;
+    };
+    pin();
+    window.addEventListener("popstate", pin);
+    return () => {
+      window.history.pushState = originalPush;
+      window.history.replaceState = originalReplace;
+      window.removeEventListener("popstate", pin);
+    };
+  }, []);
+}
 
 function teenTabIcon(routeName, focused) {
   if (routeName === "Diary") return focused ? "journal" : "journal-outline";
@@ -111,6 +143,9 @@ function MainAppTabs({ navigation }) {
 export default function App() {
   // Expo Router's ExpoRoot already mounts a NavigationContainer. The legacy
   // stack/tabs nest under that single container — do not wrap another one.
+  // Keep the address bar on `/` so nested screen names do not remount this
+  // shell via Expo Router (that left clinician view stuck on its spinner).
+  usePinWebPathToRoot();
   return (
     <HelmetProvider>
       <AppModeProvider>

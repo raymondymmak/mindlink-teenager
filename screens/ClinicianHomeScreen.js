@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -9,7 +9,6 @@ import {
   View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
-import { useFocusEffect } from "@react-navigation/native";
 import { getGeminiStatusLabel, isGeminiConfigured } from "../utils/geminiClient";
 import {
   generateSessionBriefArtifact,
@@ -35,57 +34,61 @@ function Panel({ title, children }) {
 export default function ClinicianHomeScreen() {
   const { width } = useWindowDimensions();
   const split = width >= 960;
-  const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [brief, setBrief] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState("");
   const [shareStatus, setShareStatus] = useState("");
 
-  const runGeneration = useCallback(async () => {
+  const runGeneration = useCallback(async ({ forceLocal = false } = {}) => {
     setIsGenerating(true);
     setError("");
     try {
-      const record = await generateSessionBriefArtifact();
+      const record = await generateSessionBriefArtifact({ forceLocal });
       setBrief(record);
       if (record?.analysis) setAnalysis(record.analysis);
     } catch (err) {
       setError(err.message || "Failed to generate Session Brief.");
     } finally {
       setIsGenerating(false);
-      setIsLoading(false);
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const inputs = await loadSessionBriefInputs();
-      if (hasEnoughBriefData(inputs)) {
-        setAnalysis(analyzeLocalSignals(inputs));
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrap = async () => {
+      try {
+        const inputs = await loadSessionBriefInputs();
+        if (cancelled) return;
+        if (hasEnoughBriefData(inputs)) {
+          setAnalysis(analyzeLocalSignals(inputs));
+        }
+        const cached = await loadCachedSessionBrief();
+        if (cancelled) return;
+        if (cached) {
+          setBrief(cached);
+          if (cached.analysis) setAnalysis(cached.analysis);
+        }
+        const shouldGenerate = await consumePendingBriefGeneration();
+        if (cancelled) return;
+        if (!cached && hasEnoughBriefData(inputs)) {
+          await runGeneration({ forceLocal: true });
+          if (cancelled) return;
+        }
+        if (shouldGenerate || (!cached && hasEnoughBriefData(inputs))) {
+          runGeneration({ forceLocal: false });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load Session Brief.");
+        }
       }
-      const cached = await loadCachedSessionBrief();
-      if (cached) {
-        setBrief(cached);
-        if (cached.analysis) setAnalysis(cached.analysis);
-      }
-      setIsLoading(false);
-      const shouldGenerate = await consumePendingBriefGeneration();
-      if (shouldGenerate || (!cached && hasEnoughBriefData(inputs))) {
-        // Do not block the clinician shell on Gemini. Panels come from
-        // on-device data; the brief fills in when synthesis finishes or falls back.
-        runGeneration();
-      }
-    } catch (err) {
-      setError(err.message || "Failed to load Session Brief.");
-      setIsLoading(false);
-    }
+    };
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, [runGeneration]);
-
-  useFocusEffect(
-    useCallback(() => {
-      bootstrap();
-    }, [bootstrap])
-  );
 
   const handleShare = async () => {
     const shared = await shareOrCopyText(
@@ -94,15 +97,6 @@ export default function ClinicianHomeScreen() {
     );
     setShareStatus(shared ? "Brief copied or handed to the share sheet." : "");
   };
-
-  if (isLoading && !brief && !analysis) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007bff" />
-        <Text style={styles.loadingText}>Loading clinician view…</Text>
-      </View>
-    );
-  }
 
   const geminiReady = isGeminiConfigured();
   const liveAnalysis = analysis || brief?.analysis;
@@ -150,7 +144,7 @@ export default function ClinicianHomeScreen() {
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={runGeneration}
+          onPress={() => runGeneration({ forceLocal: false })}
           disabled={isGenerating}
         >
           {isGenerating ? (

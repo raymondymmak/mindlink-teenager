@@ -104,7 +104,7 @@ npx eas-cli env:create production --name PINECONE_KEY --value "$PINECONE_KEY" --
 npx eas-cli env:create production --name GEMINI_KEY --value "$GEMINI_KEY" --visibility sensitive --non-interactive
 ```
 
-`@react-navigation/native` is pinned to `^7.3.18` so Expo Router's server export can load `createScreenFactory`. The teenager UI is still the existing React Navigation `App.js`, wrapped by a one-route `app/` shell. Nested stack/tab names can appear in the URL; `app/[...spa].js` and `app/+not-found.js` load that same shell so a reload of `/Chat` or `/MainApp` does not show Unmatched Route.
+`@react-navigation/native` is pinned to `^7.3.18` so Expo Router's server export can load `createScreenFactory`. The teenager UI is still the existing React Navigation `App.js`, wrapped by a one-route `app/` shell. Nested stack/tab names can appear in the URL; `app/+not-found.js` redirects those reloads to `/`, and the web app pins the address bar to `/` so in-app navigation does not remount the shell.
 
 On web, the client calls same-origin `/api/context`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/context` unless `EXPO_PUBLIC_CONTEXT_API_URL` is set. If the context API is down, chat and brief synthesis continue without RAG.
 
