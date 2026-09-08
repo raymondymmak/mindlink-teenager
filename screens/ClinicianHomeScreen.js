@@ -68,14 +68,15 @@ export default function ClinicianHomeScreen() {
         setBrief(cached);
         if (cached.analysis) setAnalysis(cached.analysis);
       }
+      setIsLoading(false);
       const shouldGenerate = await consumePendingBriefGeneration();
       if (shouldGenerate || (!cached && hasEnoughBriefData(inputs))) {
-        await runGeneration();
-        return;
+        // Do not block the clinician shell on Gemini. Panels come from
+        // on-device data; the brief fills in when synthesis finishes or falls back.
+        runGeneration();
       }
     } catch (err) {
       setError(err.message || "Failed to load Session Brief.");
-    } finally {
       setIsLoading(false);
     }
   }, [runGeneration]);

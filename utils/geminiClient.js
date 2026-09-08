@@ -51,16 +51,31 @@ export function missingApiKeyError() {
   return error;
 }
 
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`${label} timed out after ${ms}ms`);
+      error.code = "TIMEOUT";
+      error.status = 503;
+      reject(error);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function isRetryableGeminiError(error) {
   const status = error?.status;
   const message = String(error?.message || "").toLowerCase();
   return (
     status === 429 ||
     status === 503 ||
+    error?.code === "TIMEOUT" ||
     message.includes("exceeded your current quota") ||
     message.includes("resource_exhausted") ||
     message.includes("high demand") ||
-    message.includes("unavailable")
+    message.includes("unavailable") ||
+    message.includes("timed out")
   );
 }
 
@@ -106,13 +121,17 @@ async function generateWithSdk({
   systemInstruction,
 }) {
   const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config: systemInstruction
-      ? { systemInstruction }
-      : undefined,
-  });
+  const response = await withTimeout(
+    ai.models.generateContent({
+      model,
+      contents,
+      config: systemInstruction
+        ? { systemInstruction }
+        : undefined,
+    }),
+    12000,
+    `Gemini SDK (${model})`
+  );
   return (response?.text || "").trim();
 }
 
@@ -130,11 +149,15 @@ async function generateWithRest({
     };
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const response = await withTimeout(
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    12000,
+    `Gemini REST (${model})`
+  );
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
