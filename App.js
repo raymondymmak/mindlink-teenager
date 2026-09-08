@@ -91,7 +91,13 @@ function MainAppTabs({ navigation }) {
         tabBarInactiveTintColor: "gray",
         headerShown: true,
         headerRight: () => (
-          <TouchableOpacity onPress={resetToWelcome} style={styles.resetButton}>
+          <TouchableOpacity
+            onPress={resetToWelcome}
+            style={styles.resetButton}
+            accessibilityRole="button"
+            accessibilityLabel="Reset the app"
+            accessibilityHint="Clears saved data and returns to the welcome screen"
+          >
             <Text style={styles.resetButtonText}>Reset</Text>
           </TouchableOpacity>
         ),
@@ -160,7 +166,7 @@ const styles = StyleSheet.create({
   resetButton: {
     marginRight: 10,
     padding: 5,
-    backgroundColor: "#007bff",
+    backgroundColor: "#d32f2f",
     borderRadius: 5,
   },
   resetButtonText: {

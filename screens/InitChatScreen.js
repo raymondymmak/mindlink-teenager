@@ -40,18 +40,32 @@ const InitChatScreen = ({ navigation }) => {
   const [storedName, setStoredName] = useState("");
   const { height: screenHeight, width: screenWidth } = Dimensions.get("window"); // Get screen dimensions
 
-  // Set up the header with a button
+  const finishConversationEarly = async () => {
+    await startSessionBrief(messages);
+  };
+
+  // Wrap up early via the same Summary / Session Brief path as a normal end.
+  // Do not skip the initial summary by jumping to MainApp/journal.
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={goToMainApp} style={{ marginRight: 12 }}>
+        <TouchableOpacity
+          onPress={finishConversationEarly}
+          style={{ marginRight: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Finish the conversation early"
+          accessibilityHint="Ends this chat and opens the initial summary"
+          {...(Platform.OS === "web"
+            ? { title: "Finish the conversation early" }
+            : {})}
+        >
           <Text style={{ color: "#007bff", fontWeight: "600" }}>
-            Skip to journal
+            Finish early
           </Text>
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, messages]);
 
   useEffect(() => {
     const storedName = "";
@@ -70,15 +84,6 @@ const InitChatScreen = ({ navigation }) => {
     fetchStoredName();
     console.log("Stored name:", storedName);
   }, []);
-
-  const goToMainApp = async () => {
-    try {
-      await AsyncStorage.setItem("@initial_chat_completed", "true");
-    } catch (error) {
-      console.error("Failed to mark intro complete:", error);
-    }
-    navigation.navigate("MainApp");
-  };
 
   const startSessionBrief = async (currentMessages = messages) => {
     try {
@@ -278,7 +283,7 @@ const InitChatScreen = ({ navigation }) => {
             {
               text: `Hello ${storedName}, welcome to MindLink!
 
-I'm here to be your personal, private guide for exploring your emotions and mental well-being. To start, we'll have a gentle chat to help me understand how best to support you. And when you've shared enough, just press the **"1st Report"** button.
+I'm here to be your personal, private guide for exploring your emotions and mental well-being. To start, we'll have a gentle chat to help me understand how best to support you. When you've shared enough, press **"Finish early"** to wrap up and see your first summary.
 
 Individual conversations will **never** be stored, and summaries and insights are stored securely and locally on your device only. We will **never** share your personal data without your explicit consent! This is a safe, confidential space just for you. By continuing, you agree to our terms of service and privacy policy.
 
