@@ -18,7 +18,6 @@ import {
   SYSTEM_INSTRUCTION_SUMMARY,
   SYSTEM_INSTRUCTION_POINTS,
 } from "../utils/systemInstruction";
-import InsightScreen from "./InsightScreen";
 import {
   buildContextQueryFromMessages,
   withClinicalContext,
@@ -49,12 +48,10 @@ const SummaryScreen = ({ route, navigation }) => {
     { key: "general", title: "General" },
     { key: "today", title: "Today" },
     { key: "history", title: "History" },
-    { key: "insights", title: "Brief" },
   ]);
 
   // Check if this is part of the initial flow (called directly from ChatScreen)
   const isInitialFlow = route.params?.isInitialFlow;
-  const openInsights = route.params?.openInsights;
 
   // Fetch user name from AsyncStorage
   useEffect(() => {
@@ -71,12 +68,6 @@ const SummaryScreen = ({ route, navigation }) => {
 
     fetchUserName();
   }, []);
-
-  useEffect(() => {
-    if (openInsights) {
-      setIndex(3);
-    }
-  }, [openInsights]);
 
   // Check for existing reports
   useEffect(() => {
@@ -364,7 +355,6 @@ const SummaryScreen = ({ route, navigation }) => {
     general: GeneralTab,
     today: TodayTab,
     history: HistoryTab,
-    insights: InsightScreen,
   });
 
   return (
@@ -381,7 +371,7 @@ const SummaryScreen = ({ route, navigation }) => {
         />
         <View>
           <Text style={styles.headerText}>{userName}</Text>
-          <Text style={styles.headerSubText}>Reports & Session Brief</Text>
+          <Text style={styles.headerSubText}>Your notes from this chat</Text>
         </View>
       </View>
       {isLoading ? (

@@ -270,26 +270,15 @@ const HomeScreen = ({ navigation }) => {
         mood,
         tags: Array.isArray(tags) ? [...tags] : tags,
       });
-      const goToBrief = async () => {
-        await requestBriefGeneration();
-        navigation.navigate("Reports", { openInsights: true });
-      };
+      await requestBriefGeneration();
       if (Platform.OS === "web") {
-        if (
-          window.confirm(
-            "Entry saved. Generate a Session Brief for a clinician?"
-          )
-        ) {
-          await goToBrief();
-        }
+        window.alert(
+          "Entry saved. Check My week for a glance — a clinician can open their view from the top of the screen."
+        );
       } else {
         Alert.alert(
-          "Entry Saved",
-          "Your diary entry has been saved. Generate a Session Brief for a clinician?",
-          [
-            { text: "Later", style: "cancel" },
-            { text: "Generate Brief", onPress: goToBrief },
-          ]
+          "Entry saved",
+          "Check My week for a glance. A clinician can open their view from the top of the screen."
         );
       }
       loadDiaryEntries();

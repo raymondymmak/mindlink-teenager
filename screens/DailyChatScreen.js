@@ -122,22 +122,20 @@ const DailyChatScreen = ({ navigation }) => {
     }
   }, [messages]);
 
-  const startSessionBrief = async (currentMessages = messages) => {
+  const saveCheckInForSession = async (currentMessages = messages) => {
     try {
       await saveCheckIn(currentMessages);
       await requestBriefGeneration();
-      const cleanedMessages = currentMessages.map((msg) => ({
-        role: msg.user?._id === 1 ? "user" : "model",
-        parts: [{ text: msg.text }],
-      }));
-      navigation.navigate("Reports", {
-        cleanedMessages,
-        isInitialFlow: false,
-        openInsights: true,
-      });
+      const message =
+        "Check-in saved. See My week for a glance, or open Clinician view from the top of the screen.";
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("Saved", message);
+      }
     } catch (error) {
-      console.error("Failed to start Session Brief:", error);
-      Alert.alert("Error", "Could not open Session Brief.");
+      console.error("Failed to save check-in:", error);
+      Alert.alert("Error", "Could not save this check-in.");
     }
   };
 
@@ -193,7 +191,7 @@ const DailyChatScreen = ({ navigation }) => {
       if (!isGeminiConfigured()) {
         const botMessage = {
           _id: createUniqueId("bot"),
-          text: "Gemini is not configured on this device, so I can't continue the live chat. You can still write a diary entry and generate a Session Brief from the Reports → Brief tab.",
+          text: "Gemini is not configured on this device, so I can't continue the live chat. You can still write a diary entry and open Clinician view from the top of the screen.",
           createdAt: new Date(),
           user: {
             _id: 2,
@@ -257,25 +255,25 @@ const DailyChatScreen = ({ navigation }) => {
           if (Platform.OS === "web") {
             if (
               window.confirm(
-                "Create a Session Brief from today's check-in?"
+                "Save today's check-in?"
               )
             ) {
               setMessages((currentMessages) => {
-                startSessionBrief(currentMessages);
+                saveCheckInForSession(currentMessages);
                 return currentMessages;
               });
             }
           } else {
             Alert.alert(
-              "Create Session Brief?",
-              "Generate a clinician Session Brief from today's check-in?",
+              "Save check-in?",
+              "Keep today's chat so it can show in My week and clinician view?",
               [
                 { text: "Not Yet", style: "cancel" },
                 {
                   text: "Yes, Please",
                   onPress: () => {
                     setMessages((currentMessages) => {
-                      startSessionBrief(currentMessages);
+                      saveCheckInForSession(currentMessages);
                       return currentMessages;
                     });
                   },
@@ -303,7 +301,7 @@ const DailyChatScreen = ({ navigation }) => {
       const detail = error?.message ? ` (${error.message})` : "";
       Alert.alert(
         "Gemini unavailable",
-        `Live chat could not continue${detail}. You can still write a diary entry and generate an on-device Session Brief from Reports → Brief.`
+        `Live chat could not continue${detail}. You can still write a diary entry and open Clinician view from the top of the screen.`
       );
     } finally {
       setIsLoading(false);
@@ -515,9 +513,9 @@ const DailyChatScreen = ({ navigation }) => {
             <View style={styles.inputContainer}>
               <TouchableOpacity
                 style={styles.briefInlineButton}
-                onPress={() => startSessionBrief(messages)}
+                onPress={() => saveCheckInForSession(messages)}
               >
-                <Text style={styles.briefLinkText}>Brief</Text>
+                <Text style={styles.briefLinkText}>Save</Text>
               </TouchableOpacity>
               <TextInput
                 style={[
@@ -577,9 +575,9 @@ const DailyChatScreen = ({ navigation }) => {
 
               <TouchableOpacity
                 style={styles.briefLink}
-                onPress={() => startSessionBrief(messages)}
+                onPress={() => saveCheckInForSession(messages)}
               >
-                <Text style={styles.briefLinkText}>Create Session Brief</Text>
+                <Text style={styles.briefLinkText}>Save check-in</Text>
               </TouchableOpacity>
               <View style={styles.mobileInputContainer}>
                 <TextInput

@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   lastSessionBriefPath: "@last_session_brief_path",
   pendingBrief: "@pending_session_brief",
   dailyChatMessages: "@daily_chat_messages",
+  appMode: "@app_mode",
 };
 
 function getFormattedDate(date = new Date()) {

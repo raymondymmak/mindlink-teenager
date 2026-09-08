@@ -104,7 +104,7 @@ const WelcomeScreen = ({ navigation }) => {
             <Text style={styles.label}>How do you want us to call you?</Text>
             {!isGeminiConfigured() ? (
               <Text style={styles.demoNote}>
-                Demo mode: no Gemini API key is set. You can journal and generate a local Session Brief. Add EXPO_PUBLIC_GEMINI_API_KEY to enable live chat.
+                Demo mode: no Gemini API key is set. You can journal in Teen mode, then open Clinician view from the top of the screen. Add EXPO_PUBLIC_GEMINI_API_KEY to enable live chat.
               </Text>
             ) : null}
             <View style={styles.inputRow}>

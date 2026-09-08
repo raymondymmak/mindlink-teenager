@@ -6,6 +6,8 @@ Created by Mak Yiu Man Raymond (麥耀文) and the MindLink team.
 
 MindLink is a mobile application designed to serve as a compassionate and supportive mental wellness assistant specifically for Hong Kong teenagers. It helps teenagers articulate symptoms and helps psychiatrists understand them.
 
+**Demo v1** is one Expo app with two lenses over the same on-device `localData`: **Teen** (capture + a thin My week card) and **Clinician** (Session Brief beside source panels). Mode is not two databases.
+
 The hero clinician deliverable is the **Session Brief**: a structured, scannable note synthesized from on-device journal entries, mood/tags, and chat check-ins.
 
 ## Features
@@ -16,7 +18,9 @@ The hero clinician deliverable is the **Session Brief**: a structured, scannable
   - Crisis modal to provide self-help resources when the user is in distress.
   - Auto-generation of reports which are archived to track progress over time.
 - Daily journaling with guided prompts, as well as tracking of mood and topic.
-- Local storage of all user data for privacy.
+- **Teen mode**: Diary, Chat, and a thin **My week** card (mood glance, top tags, ready for session?) — no full Session Brief.
+- **Clinician mode**: Session Brief beside mood trajectory, tag frequency, and key quotes / stressors. Opened from **Show clinician view** next to red **Reset Demo**.
+- Local storage of all user data for privacy. Both modes read the same on-device store.
 - **Session Brief** for clinicians, including:
   - Mood trajectory from self-rated journal scores.
   - Tag frequency and recurring themes.
@@ -25,20 +29,19 @@ The hero clinician deliverable is the **Session Brief**: a structured, scannable
   - Observational (keyword) signals from user-reported text — not PHQ/HAM scores.
   - Copy / share as plain text.
 
-## Session Brief MVP
+## Teen / Clinician demo path
 
-### Demo path (no Gemini key)
+1. Open the app and enter a preferred name. If `EXPO_PUBLIC_GEMINI_API_KEY` is missing, the app continues to Teen mode (journal) in demo mode.
+2. In **Diary**, write a short entry, set a mood (try one day below 4/10), and add tags such as `school` or `anxiety`. **Chat** can also save a check-in.
+3. Confirm the teen header shows **Show clinician view** next to red **Reset Demo**. **My week** stays friendly (mood glance, top tags) — not the full Brief.
+4. Tap **Show clinician view**. The clinician shell shows Session Brief beside source panels built from the same local data.
+5. Tap **Show teen view** to return. **Reset Demo** stays red and clears on-device data.
 
-1. Open the app and enter a preferred name. If `EXPO_PUBLIC_GEMINI_API_KEY` is missing, the app continues to the journal in demo mode.
-2. In **Diary**, write a short entry, set a mood (try one day below 4/10), and add tags such as `school` or `anxiety`.
-3. Confirm **Generate Brief**, or open **Reports → Brief**.
-4. Review the structured Session Brief and use **Copy / Share**.
-
-Optional: from **Chat**, tap **Create Session Brief** after a short check-in. Without a key, live Gemini replies are disabled, but a local brief can still be generated from saved check-in text and journal data.
+Optional: from intro chat, **Finish early** still wraps up to the teen notes screen, then Home. The Brief is generated in Clinician view, not as the teen home.
 
 ### Demo path (with Gemini key)
 
-Same as above. Chat uses Gemini Flash directly. Before each chat turn or Session Brief / report synthesis, the app POSTs `{ query }` to this project's `/api/context` and appends returned `context` to the system instruction. If that context call fails, Gemini continues without retrieved context. If Gemini fails, the same structured local brief is shown.
+Same as above. Chat uses Gemini Flash directly. Before each chat turn or Session Brief synthesis, the app POSTs `{ query }` to this project's `/api/context` and appends returned `context` to the system instruction. If that context call fails, Gemini continues without retrieved context. If Gemini fails, the same structured local brief is shown.
 
 ### Privacy
 
@@ -109,8 +112,7 @@ This project does **not** depend on `gemini-middleman` for RAG.
 
 ## Tech Stack
 
-- **Frontend for teenagers**: React Native (with Expo)
-- **Frontend for doctors**: React (with Vite) — separate repo (`mindlink-doctor`)
+- **Frontend**: One Expo app. Teen and Clinician are modes over the same on-device data.
 - **LLM**: Gemini Developer API, called from this app (Flash stays direct)
 - **RAG**: this repo `POST /api/context` → Gemini embeddings + Pinecone `mindlink-knowledge-base`
 
@@ -120,6 +122,7 @@ This project does **not** depend on `gemini-middleman` for RAG.
 npm start           # expo start
 npm run web         # expo start --web
 node scripts/test-session-brief.js
+node scripts/test-teen-week.js
 node scripts/test-context-api.mjs
 node scripts/test-retrieve-context.mjs
 ```

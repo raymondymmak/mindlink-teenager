@@ -621,6 +621,55 @@ function hasEnoughBriefData({ entries = [], checkIns = [], summaries = [] }) {
   return hasDiary || hasCheckIn || hasReport;
 }
 
+function formatTeenMoodGlance(moodSummary, moodTrajectory = []) {
+  const recent = (moodTrajectory || []).slice(-7);
+  if (!moodSummary || moodSummary.count === 0 || recent.length === 0) {
+    return {
+      headline: "No mood notes yet",
+      detail:
+        "Save a diary entry with a 1–10 mood and a glance will show up here.",
+      recent: [],
+    };
+  }
+  const chips = recent.map((item) => `${item.mood}/10`);
+  return {
+    headline:
+      recent.length === 1
+        ? `Latest mood: ${recent[0].mood}/10`
+        : `Around ${moodSummary.average}/10 lately`,
+    detail: `Recent: ${chips.join(" · ")}`,
+    recent,
+  };
+}
+
+function buildTeenWeekCard(analysis = {}) {
+  const sources = analysis.dataSources || {};
+  const topTags = Object.entries(analysis.tagFrequency || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([tag, count]) => ({ tag, count }));
+  const readyForSession =
+    (sources.diaryEntries || 0) > 0 ||
+    (sources.checkIns || 0) > 0 ||
+    (sources.chatReports || 0) > 0;
+  const moodGlance = formatTeenMoodGlance(
+    analysis.moodSummary,
+    analysis.moodTrajectory
+  );
+  return {
+    title: "My week",
+    moodGlance,
+    topTags,
+    readyForSession,
+    readyTitle: "Ready for session?",
+    readyBody: readyForSession
+      ? "Yes — you've saved notes this week."
+      : "Not yet — write in Diary or Chat first.",
+    entryCount: sources.diaryEntries || 0,
+    checkInCount: sources.checkIns || 0,
+  };
+}
+
 function buildLocalChatReport(cleanedMessages = [], userName = "User") {
   const userTurns = cleanedMessages
     .filter((msg) => msg.role === "user")
@@ -648,11 +697,11 @@ function buildLocalKeyPoints(cleanedMessages = []) {
   if (userTurns.length === 0) {
     return {
       title1: "Keep checking in",
-      point1: "A short daily note about mood, sleep, or school is enough to start a Session Brief.",
-      title2: "Tags help the brief",
+      point1: "A short daily note about mood, sleep, or school is enough to start.",
+      title2: "Tags help you look back",
       point2: "In the diary, add tags such as school, family, or anxiety so themes are easier to scan.",
-      title3: "Share with a clinician",
-      point3: "The Session Brief can be copied or shared as plain text from the Brief tab.",
+      title3: "Share when you are ready",
+      point3: "Your notes stay on this device. A clinician can open their view from the top of the app.",
     };
   }
   return {
@@ -683,6 +732,7 @@ module.exports = {
   buildOpeningQuestions,
   formatSessionBriefMarkdown,
   hasEnoughBriefData,
+  buildTeenWeekCard,
   buildLocalChatReport,
   buildLocalKeyPoints,
   getMoodTrajectory,

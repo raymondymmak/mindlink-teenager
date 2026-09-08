@@ -44,7 +44,7 @@ const InitChatScreen = ({ navigation }) => {
     await startSessionBrief(messages);
   };
 
-  // Wrap up early via the same Summary / Session Brief path as a normal end.
+  // Wrap up early via the same Summary path as a normal end (teen notes, not the clinician Brief).
   // Do not skip the initial summary by jumping to MainApp/journal.
   useEffect(() => {
     navigation.setOptions({
@@ -95,11 +95,10 @@ const InitChatScreen = ({ navigation }) => {
       navigation.navigate("Summary", {
         cleanedMessages,
         isInitialFlow: true,
-        openInsights: true,
       });
     } catch (error) {
-      console.error("Failed to start Session Brief:", error);
-      Alert.alert("Error", "Could not open Session Brief.");
+      console.error("Failed to wrap up chat:", error);
+      Alert.alert("Error", "Could not finish this chat.");
     }
   };
 
@@ -348,7 +347,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
             role: "model",
             parts: [
               {
-                text: "Gemini is not configured, so live chat is unavailable. Continue to the journal and generate a Session Brief from a diary entry, or add EXPO_PUBLIC_GEMINI_API_KEY and restart Expo.",
+                text: "Gemini is not configured, so live chat is unavailable. Use Finish early to continue to the journal, or add EXPO_PUBLIC_GEMINI_API_KEY and restart Expo.",
               },
             ],
           },
@@ -381,7 +380,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
         setTimeout(() => {
           if (Platform.OS === "web") {
             if (
-              window.confirm("Create your first Session Brief from this chat?")
+              window.confirm("Wrap up this chat and continue?")
             ) {
               setMessages((currentMessages) => {
                 startSessionBrief(currentMessages);
@@ -390,8 +389,8 @@ So, what do you want to talk about today? You can share anything on your mind, o
             }
           } else {
             Alert.alert(
-              "Create Session Brief?",
-              "Generate your first clinician Session Brief from this chat?",
+              "Wrap up this chat?",
+              "Save this check-in and continue to your notes?",
               [
                 { text: "Not Yet", style: "cancel" },
                 {
@@ -425,7 +424,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
           role: "model",
           parts: [
             {
-              text: `Gemini was unavailable${detail}. Live chat could not continue. You can still write a diary entry and generate an on-device Session Brief from Reports → Brief.`,
+              text: `Gemini was unavailable${detail}. Live chat could not continue. You can still write a diary entry, then open Clinician view from the top of the screen.`,
             },
           ],
         },
