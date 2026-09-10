@@ -66,14 +66,7 @@ EXPO_PUBLIC_GEMINI_MODEL=auto
 2. Copy `.env.example` to `.env` and paste the key.
 3. Restart Expo so the `EXPO_PUBLIC_*` value is inlined.
 
-Expo web only inlines `EXPO_PUBLIC_*` variables. For EAS Hosting, export the web bundle with the public key set from the Cursor secret (do not commit `.env`):
-
-```bash
-EXPO_PUBLIC_GEMINI_API_KEY="$GEMINI_KEY" \
-EXPO_PUBLIC_GEMINI_MODEL="${EXPO_PUBLIC_GEMINI_MODEL:-auto}" \
-  npx expo export -p web
-npx eas-cli deploy --prod --non-interactive --environment production
-```
+Expo web only inlines `EXPO_PUBLIC_*` variables. For EAS Hosting export, set the public key from the Cursor secret (do not commit `.env`). **Deploy commands, staging vs production, and URLs:** [DEPLOY.md](./DEPLOY.md). Cursor agents default to **staging**, not `--prod`.
 
 `gemini-2.0-flash` is no longer available. Default routing is `auto`: chat/check-ins on `gemini-3.5-flash-lite`, Session Brief on `gemini-3.5-flash`. Pin `EXPO_PUBLIC_GEMINI_MODEL` to a specific id (including `gemini-3.6-flash`) to override. If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
 
@@ -117,6 +110,10 @@ This project does **not** depend on `gemini-middleman` for RAG.
 - **Frontend**: One Expo app. Teen and Clinician are modes over the same on-device data.
 - **LLM**: Gemini Developer API, called from this app (Flash stays direct)
 - **RAG**: this repo `POST /api/context` → Gemini embeddings + Pinecone `mindlink-knowledge-base`
+
+## Deploy
+
+EAS Hosting is **preview-first**. Cursor agents must deploy to the `staging` alias, not production, unless Raymond explicitly asks. See [DEPLOY.md](./DEPLOY.md).
 
 ## Scripts
 
