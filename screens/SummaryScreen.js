@@ -21,7 +21,7 @@ import {
   buildContextQueryFromMessages,
   withClinicalContext,
 } from "../utils/contextApi";
-import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import { generateGeminiText, checkGeminiConfigured } from "../utils/geminiClient";
 import {
   listSavedReports,
   readStoredText,
@@ -159,7 +159,7 @@ const SummaryScreen = ({ route, navigation }) => {
           ];
 
           let summaryText = "";
-          if (isGeminiConfigured()) {
+          if (await checkGeminiConfigured()) {
             const { systemInstruction } = await withClinicalContext(
               SYSTEM_INSTRUCTION_SUMMARY,
               buildContextQueryFromMessages(cleanedMessages)
@@ -199,7 +199,7 @@ const SummaryScreen = ({ route, navigation }) => {
           ];
 
           let points = "";
-          if (isGeminiConfigured()) {
+          if (await checkGeminiConfigured()) {
             points = await generateGeminiText({
               contents: formattedContents,
               systemInstruction: SYSTEM_INSTRUCTION_POINTS,

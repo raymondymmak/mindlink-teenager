@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
-import { getGeminiStatusLabel, isGeminiConfigured } from "../utils/geminiClient";
+import { getGeminiStatusLabel, useGeminiConfigured } from "../utils/geminiClient";
 import {
   generateSessionBriefArtifact,
   loadCachedSessionBrief,
@@ -85,6 +85,7 @@ export default function ClinicianHomeScreen() {
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState("");
   const [shareStatus, setShareStatus] = useState("");
+  const { configured: geminiReady } = useGeminiConfigured();
 
   const runGeneration = useCallback(async ({ forceLocal = false } = {}) => {
     setIsGenerating(true);
@@ -144,7 +145,6 @@ export default function ClinicianHomeScreen() {
     setShareStatus(shared ? "Brief copied or handed to the share sheet." : "");
   };
 
-  const geminiReady = isGeminiConfigured();
   const liveAnalysis = analysis || brief?.analysis;
   const trajectory = liveAnalysis?.moodTrajectory || [];
   const tagEntries = Object.entries(liveAnalysis?.tagFrequency || {}).sort(
@@ -184,7 +184,7 @@ export default function ClinicianHomeScreen() {
           {brief?.warning ||
             (geminiReady
               ? "Journal, check-in, and local report data stay on-device except for this Gemini synthesis call."
-              : "Set EXPO_PUBLIC_GEMINI_API_KEY to replace the local demo narrative with a Gemini synthesis. Structure and on-device analysis stay the same.")}
+              : "Set server-only GEMINI_KEY to replace the local demo narrative with a Gemini synthesis. Structure and on-device analysis stay the same.")}
         </Text>
       </View>
 

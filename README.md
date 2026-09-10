@@ -33,7 +33,7 @@ Design system (spec + static HTML samples; Expo UI unchanged until approved): [D
 
 ## Teen / Clinician demo path
 
-1. Open the app and enter a preferred name. If `EXPO_PUBLIC_GEMINI_API_KEY` is missing, the app continues to Teen mode (journal) in demo mode.
+1. Open the app and enter a preferred name. If server `GEMINI_KEY` is missing, the app continues to Teen mode (journal) in demo mode.
 2. In **Diary**, write a short entry, set a mood (try one day below 4/10), and add tags such as `school` or `anxiety`. **Chat** can also save a check-in.
 3. Confirm the teen header shows **Show clinician view** next to red **Reset Demo**. **My week** stays friendly (mood glance, top tags) — not the full Brief.
 4. Tap **Show clinician view**. The clinician shell shows Session Brief beside source panels built from the same local data.
@@ -43,38 +43,45 @@ Optional: from intro chat, **Finish early** still wraps up to the teen notes scr
 
 ### Demo path (with Gemini key)
 
-Same as above. Chat uses Gemini Flash directly. Before each chat turn or Session Brief synthesis, the app POSTs `{ query }` to this project's `/api/context` and appends returned `context` to the system instruction. If that context call fails, Gemini continues without retrieved context. If Gemini fails, the same structured local brief is shown.
+Same as above. Chat and Session Brief POST to `/api/gemini`. Before each chat turn or Session Brief synthesis, the app also POSTs `{ query }` to this project's `/api/context` and appends returned `context` to the system instruction. If that context call fails, Gemini continues without retrieved context. If Gemini fails, the same structured local brief is shown.
 
 ### Privacy
 
 - Journal entries, check-ins, chat reports, and Session Briefs are stored on-device (`AsyncStorage` / `localStorage` on web, `expo-file-system` on native).
-- When a Gemini key is set, the app calls the **Gemini Developer API directly**. Chat uses **Gemini 3.5 Flash-Lite**; Session Brief uses **Gemini 3.5 Flash** (and falls back to Lite, then the on-device narrative, if Flash is rate-limited). There is no Gemini Developer API "Auto" model id — `EXPO_PUBLIC_GEMINI_MODEL=auto` is this in-app split.
+- When server `GEMINI_KEY` is set, chat and Session Brief POST to this project's `/api/gemini`. The client never embeds a Gemini key. Chat uses **Gemini 3.5 Flash-Lite**; Session Brief uses **Gemini 3.5 Flash** (and falls back to Lite, then the on-device narrative, if Flash is rate-limited). There is no Gemini Developer API "Auto" model id — `EXPO_PUBLIC_GEMINI_MODEL=auto` is this in-app split.
 - Clinical procedure snippets come from **this repo's** `POST /api/context` (EAS Hosting API route). The Expo client never embeds `PINECONE_KEY` or talks to Pinecone.
 - Payloads to Gemini are the current chat turn or the already-computed Session Brief observations, plus optional retrieved context in the system preamble.
 - Without a key, brief generation stays on-device.
 
 ## Gemini API key
 
-This Expo 53 app reads:
+Gemini generate and embeddings run on Expo Router API routes. Set a **server-only** key (never `EXPO_PUBLIC_*`):
 
 ```bash
-EXPO_PUBLIC_GEMINI_API_KEY=your_key_here
+GEMINI_KEY=your_key_here
 EXPO_PUBLIC_GEMINI_MODEL=auto
 ```
 
 1. Create a key in [Google AI Studio](https://aistudio.google.com/apikey).
-2. Copy `.env.example` to `.env` and paste the key.
-3. Restart Expo so the `EXPO_PUBLIC_*` value is inlined.
+2. Copy `.env.example` to `.env` and set `GEMINI_KEY` (local API routes read it from the environment).
+3. Restart Expo. Do **not** put the key in `EXPO_PUBLIC_GEMINI_API_KEY` — Expo inlines those into the web JS.
 
-Expo web only inlines `EXPO_PUBLIC_*` variables. For EAS Hosting export, set the public key from the Cursor secret (do not commit `.env`). **Deploy commands, staging vs production, and URLs:** [DEPLOY.md](./DEPLOY.md). Cursor agents default to **staging**, not `--prod`.
+```http
+GET  /api/gemini → { "configured": true|false }
+POST /api/gemini { "contents", "systemInstruction", "task": "chat"|"brief" } → { "text" }
+```
 
-`gemini-2.0-flash` is no longer available. Default routing is `auto`: chat/check-ins on `gemini-3.5-flash-lite`, Session Brief on `gemini-3.5-flash`. Pin `EXPO_PUBLIC_GEMINI_MODEL` to a specific id (including `gemini-3.6-flash`) to override. If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
+On web, the client calls same-origin `/api/gemini`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/gemini` unless `EXPO_PUBLIC_GEMINI_API_URL` is set. Demo mode is decided by that health check, not by shipping the key to the browser.
 
-The client prefers `@google/genai` and falls back to the official REST endpoint (`generativelanguage.googleapis.com`) if the SDK cannot run in React Native. Never hardcode the key in source.
+**Deploy commands, staging vs production, and URLs:** [DEPLOY.md](./DEPLOY.md). Cursor agents default to **staging**, not `--prod`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`. Put `GEMINI_KEY` on the EAS **preview** (and production) environment as **sensitive**.
+
+`gemini-2.0-flash` is no longer available. Default routing is `auto`: chat/check-ins on `gemini-3.5-flash-lite`, Session Brief on `gemini-3.5-flash`. Pin `EXPO_PUBLIC_GEMINI_MODEL` or server `GEMINI_MODEL` to a specific id (including `gemini-3.6-flash`) to override. If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
+
+Never hardcode the key in source. Never print `GEMINI_KEY`.
 
 ## Pinecone RAG in this repo
 
-Gemini Flash stays in-app. Retrieval runs on the server route added for EAS Hosting (`web.output: "server"` + Expo Router `app/api/context+api.js`). The existing React Navigation UI is wrapped by a thin `app/_layout.js` / `app/index.js` shell so we do not migrate screens to file-based routing.
+Chat, Session Brief, and embeddings run on Expo Router API routes (`web.output: "server"`). Retrieval is `app/api/context+api.js`; generate is `app/api/gemini+api.js`. The existing React Navigation UI is wrapped by a thin `app/_layout.js` / `app/index.js` shell so we do not migrate screens to file-based routing.
 
 ```http
 POST /api/context
@@ -95,6 +102,8 @@ Server env aliases (never `EXPO_PUBLIC_*`):
 Set them on EAS as **sensitive** (not `secret` — EAS Hosting cannot deploy secret visibility):
 
 ```bash
+npx eas-cli env:create preview --name PINECONE_KEY --value "$PINECONE_KEY" --visibility sensitive --non-interactive
+npx eas-cli env:create preview --name GEMINI_KEY --value "$GEMINI_KEY" --visibility sensitive --non-interactive
 npx eas-cli env:create production --name PINECONE_KEY --value "$PINECONE_KEY" --visibility sensitive --non-interactive
 npx eas-cli env:create production --name GEMINI_KEY --value "$GEMINI_KEY" --visibility sensitive --non-interactive
 ```
@@ -108,7 +117,7 @@ This project does **not** depend on `gemini-middleman` for RAG.
 ## Tech Stack
 
 - **Frontend**: One Expo app. Teen and Clinician are modes over the same on-device data.
-- **LLM**: Gemini Developer API, called from this app (Flash stays direct)
+- **LLM**: Gemini Developer API via this repo `POST /api/gemini` (server `GEMINI_KEY`)
 - **RAG**: this repo `POST /api/context` → Gemini embeddings + Pinecone `mindlink-knowledge-base`
 
 ## Deploy
@@ -122,6 +131,9 @@ npm start           # expo start
 npm run web         # expo start --web
 node scripts/test-session-brief.js
 node scripts/test-teen-week.js
+node scripts/test-gemini-client.mjs
+node scripts/test-gemini-generate.mjs
+node scripts/test-gemini-api.mjs
 node scripts/test-context-api.mjs
 node scripts/test-retrieve-context.mjs
 ```

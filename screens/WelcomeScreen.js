@@ -13,12 +13,13 @@ import {
   Keyboard
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isGeminiConfigured } from '../utils/geminiClient';
+import { checkGeminiConfigured, useGeminiConfigured } from '../utils/geminiClient';
 import { Helmet } from 'react-helmet-async';
 import { colors, fonts, radius } from '../utils/theme';
 
 const WelcomeScreen = ({ navigation }) => {
   const [name, setName] = useState('');
+  const { configured: geminiReady, ready: geminiStatusReady } = useGeminiConfigured();
 
   useEffect(() => {
     const loadName = async () => {
@@ -55,7 +56,7 @@ const WelcomeScreen = ({ navigation }) => {
       await AsyncStorage.setItem('@user_name', name);
       const initialChatCompleted = await AsyncStorage.getItem('@initial_chat_completed');
       
-      if (initialChatCompleted === 'true' || !isGeminiConfigured()) {
+      if (initialChatCompleted === 'true' || !(await checkGeminiConfigured())) {
         await AsyncStorage.setItem('@initial_chat_completed', 'true');
         navigation.navigate('MainApp');
       } else {
@@ -91,9 +92,9 @@ const WelcomeScreen = ({ navigation }) => {
           </TouchableWithoutFeedback>
           <View style={styles.bottomContainer}>
             <Text style={styles.label}>How do you want us to call you?</Text>
-            {!isGeminiConfigured() ? (
+            {geminiStatusReady && !geminiReady ? (
               <Text style={styles.demoNote}>
-                Demo mode: no Gemini API key is set. You can journal in Teen mode, then open Clinician view from the top of the screen. Add EXPO_PUBLIC_GEMINI_API_KEY to enable live chat.
+                Demo mode: Gemini is not configured on the server. You can journal in Teen mode, then open Clinician view from the top of the screen. Set server-only GEMINI_KEY to enable live chat.
               </Text>
             ) : null}
             <View style={styles.inputRow}>

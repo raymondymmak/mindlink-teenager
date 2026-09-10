@@ -2,7 +2,10 @@ import {
   buildContextQueryFromAnalysis,
   withClinicalContext,
 } from "./contextApi";
-import { generateGeminiText, isGeminiConfigured } from "./geminiClient";
+import {
+  generateGeminiText,
+  checkGeminiConfigured,
+} from "./geminiClient";
 import {
   SYSTEM_INSTRUCTION_SESSION_BRIEF,
   SYSTEM_INSTRUCTION_SUMMARY,
@@ -64,7 +67,8 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
   let rawFallback = "";
   let warning = null;
 
-  if (!forceLocal && isGeminiConfigured()) {
+  const geminiReady = await checkGeminiConfigured();
+  if (!forceLocal && geminiReady) {
     try {
       const { systemInstruction } = await withClinicalContext(
         sessionBriefSystemInstruction(),
@@ -89,9 +93,9 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
       });
     }
   } else {
-    warning = isGeminiConfigured()
+    warning = geminiReady
       ? null
-      : "No EXPO_PUBLIC_GEMINI_API_KEY found. This is an on-device demo brief using the same clinician structure.";
+      : "Gemini is not configured on the server (GEMINI_KEY). This is an on-device demo brief using the same clinician structure.";
     sections = buildLocalReportSections(analysis, {
       reason: "API key not configured",
     });
