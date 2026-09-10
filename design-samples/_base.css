@@ -1,7 +1,10 @@
 /* MindLink design tokens + chrome.
    Static samples only. Do not import this into Expo until samples are approved.
    Spec: ../DESIGN.md  |  Issue: https://github.com/raymondymmak/mindlink-teenager/issues/22
-   Visual north star: https://eecs-atlas.sethw.dev/ (quiet, paper, system sans). */
+   Visual north star: https://eecs-atlas.sethw.dev/ (quiet, paper).
+   Type: Space Grotesk (titles + body), IBM Plex Sans (meta), IBM Plex Mono (code/IDs only). */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@400;500;600&display=swap");
 
 :root {
   --bg: #fafaf9;
@@ -13,7 +16,9 @@
   --accent-soft: #eff6ff;
   --danger: #b91c1c;
   --radius: 8px;
-  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font: "Space Grotesk", system-ui, sans-serif;
+  --font-meta: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -59,6 +64,31 @@ textarea,
 select {
   font: inherit;
   color: inherit;
+}
+
+code,
+.mono,
+.num {
+  font-family: var(--font-mono);
+}
+
+.kicker,
+.lede,
+.label,
+.tab,
+.tabbar,
+.sample-strip,
+.sample-nav,
+.muted,
+.disclaimer,
+.note,
+.btn,
+.btn-text,
+.chip,
+.mood-ends,
+.mood-value,
+.topbar-actions {
+  font-family: var(--font-meta);
 }
 
 button {
@@ -372,6 +402,7 @@ input[type="range"] {
   justify-content: center;
   gap: 2px;
   color: var(--muted);
+  font-family: var(--font-meta);
   font-size: 11px;
   text-decoration: none;
 }
@@ -488,6 +519,7 @@ input[type="range"] {
 }
 
 .report h2 {
+  font-family: var(--font-meta);
   font-size: 14px;
   font-weight: 600;
 }
@@ -498,6 +530,7 @@ input[type="range"] {
 }
 
 .report .empty {
+  font-family: var(--font-meta);
   color: var(--muted);
   font-style: italic;
 }

@@ -16,7 +16,7 @@ Open the HTML files in a browser (no build). They are not wired into Expo.
 2. **One red control.** **Reset Demo** is the only filled danger button. Everything else is stone + one blue accent.
 3. **Mode is a lens.** Teen and Clinician read the same on-device `localData`. The toggle is a ghost button, not a second product.
 4. **Clinical, not cute.** Session Brief looks like a note a psychiatrist can scan in a minute. Teen screens stay friendly without becoming a sticker pack.
-5. **System type.** No Inter / Poppins / Nunito / “AI SaaS” font. Use the platform sans.
+5. **Type stack (Atlas).** Space Grotesk for titles and primary body. IBM Plex Sans for meta (captions, tabs, section labels, helper text). IBM Plex Mono only for rare code/IDs — never as general UI. No Inter / Poppins / Nunito.
 6. **Preserve behavior.** Visual work later must not drop Teen/Clinician, the 11-section Brief harness, tags, mood 1–10, Finish early, Reset, or RAG.
 
 Anti-slop (do not introduce):
@@ -43,11 +43,21 @@ Map these 1:1 into React Native `StyleSheet` later. Samples define them in `desi
 | `--accent-soft` | `#EFF6FF` | Prompt well, selected chip fill, focus ring |
 | `--danger` | `#B91C1C` | **Reset Demo only** (and crisis copy, not chrome) |
 | `--radius` | `8px` | Buttons, cards, inputs, bubbles |
-| `--font` | `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif` | All text |
+| `--font` | `"Space Grotesk", system-ui, sans-serif` | Titles and primary body |
+| `--font-meta` | `"IBM Plex Sans", system-ui, sans-serif` | Captions, tabs, section labels, helper text, chrome |
+| `--font-mono` | `"IBM Plex Mono", ui-monospace, monospace` | Code and IDs only (e.g. `POST /api/context`, section index) |
 
 Spacing: 4 / 8 / 12 / 16 / 24 / 32. Header height 48px. No box-shadow.
 
-Type: 11px kicker (uppercase, muted), 13px chrome, 14–15px body, 22px screen title (weight 600, slight negative tracking). Do not use 800-weight colored headings.
+Type roles:
+
+- **Space Grotesk** — screen titles (`h1`), diary/chat body, report paragraph text, composer.
+- **IBM Plex Sans** — kickers, ledes, tabs, section labels (`h2` / `.label`), helper/disclaimer/note, chips, mood captions, header actions. Small meta must look professional, not mono.
+- **IBM Plex Mono** — `<code>` and numeric IDs (outlined section index). Not tags, not tabs, not body.
+
+Load via Google Fonts in samples (`_base.css` `@import`). Later Expo: `@expo-google-fonts/space-grotesk`, `@expo-google-fonts/ibm-plex-sans`, and mono only if a code/ID surface needs it.
+
+Sizes: 11px kicker (uppercase, muted, Plex Sans), 13px chrome, 14–15px body (Grotesk), 22px screen title (Grotesk, weight 600, slight negative tracking). Do not use 800-weight colored headings.
 
 ---
 
@@ -112,7 +122,8 @@ Type: 11px kicker (uppercase, muted), 13px chrome, 14–15px body, 22px screen t
 | Mood scale **1–10** everywhere | 1–5, stars, emoji meters |
 | Keep tag set: school, family, friends, anxiety, procrastination, lonely | Invent a new taxonomy in the restyle |
 | One app, two modes | Split into two apps / two stores |
-| System sans | Google Fonts “friendly” families |
+| Space Grotesk + IBM Plex Sans | Inter, Poppins, Nunito, or Plex Mono as general UI |
+| Plex Mono for code/IDs only | Mono on tabs, labels, captions, or helper copy |
 | Crisis copy can use `--danger` text | Red header, red Send, red tabs |
 | Cite Atlas as the density/quiet bar | Clone Atlas copy or course-planner layout |
 
@@ -124,7 +135,7 @@ When a human says the samples are approved:
 
 1. Read this file and `design-samples/_base.css`. Screenshot the three HTML pages. Match them; do not “improve” the palette.
 2. Touch presentation only: `screens/*`, `components/DemoHeaderActions.js`, `App.js` tab/header options. **Do not** change `utils/localData.js`, `utils/sessionBriefLogic.js` harness keys, `utils/sessionBriefEngine.js`, `app/api/context+api.js`, Gemini routing, or storage keys.
-3. Replace `#007bff` / `#2e4057` / `#f5f8fa` with the tokens above. Radius 8. Header actions stay in `DemoHeaderActions` (toggle then Reset).
+3. Replace `#007bff` / `#2e4057` / `#f5f8fa` with the tokens above. Radius 8. Header actions stay in `DemoHeaderActions` (toggle then Reset). Load Space Grotesk + IBM Plex Sans (`expo-font` / `@expo-google-fonts/*`). Do not set the UI to IBM Plex Mono.
 4. Intro `InitChatScreen` keeps **Finish early** in `headerRight`. MainApp screens keep toggle + Reset.
 5. Clinician `REPORT_SECTIONS` order and empty string stay. Wide split already exists in `ClinicianHomeScreen` (`width >= 960`).
 6. Web: keep `usePinWebPathToRoot` and the Expo Router shell. Do not add CSS imports that break native.
@@ -144,6 +155,10 @@ export const tokens = {
   accentSoft: "#EFF6FF",
   danger: "#B91C1C",
   radius: 8,
+  font: "SpaceGrotesk_400Regular",
+  fontTitle: "SpaceGrotesk_600SemiBold",
+  fontMeta: "IBMPlexSans_500Medium",
+  fontMono: "IBMPlexMono_400Regular", // code / IDs only
 };
 ```
 
@@ -153,7 +168,8 @@ export const tokens = {
 
 - Restyling Expo / React Native in the same change as this spec (this repo change is docs + static HTML only)
 - New features, new Brief sections, new tags, new mood scale
-- Dark mode, i18n pass, custom icon font, design-package dependency
+- Dark mode, i18n pass, design-package dependency
+- Using IBM Plex Mono for captions, tabs, or section labels
 - Production deploy (docs-only; do not `eas deploy`)
 - Changing RAG, Gemini models, or env handling (see `AGENTS.md` for Metro `.env`)
 - Copying Atlas course-planner IA into MindLink
