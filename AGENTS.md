@@ -1,5 +1,9 @@
 # Agent notes
 
+## Deploy
+
+Default: preview via `eas deploy --alias staging --environment preview --non-interactive` after `npx expo export -p web`. Do **not** use `--prod`. Production (`https://raymondmak-app1.expo.app/`) only with explicit user approval. Full rules: [DEPLOY.md](./DEPLOY.md).
+
 ## Cursor Cloud specific instructions
 
 Expo **dev** web will red-screen the whole app if Metro’s `expo/virtual/env.js` context is empty.
