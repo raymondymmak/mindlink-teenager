@@ -14,6 +14,15 @@ const unconfiguredBody = await unconfigured.json();
 assert.strictEqual(unconfiguredBody.configured, false);
 assert.ok(!JSON.stringify(unconfiguredBody).includes("public-should-never-be-used"));
 
+const unconfiguredHealth = await POST(
+  new Request("http://localhost/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ health: true }),
+  })
+);
+assert.strictEqual((await unconfiguredHealth.json()).configured, false);
+
 const missing = await POST(
   new Request("http://localhost/api/gemini", {
     method: "POST",
@@ -39,7 +48,9 @@ assert.strictEqual((await rejectedKey.json()).code, "KEY_NOT_ALLOWED");
 
 process.env.GEMINI_KEY = "server-secret";
 const originalFetch = globalThis.fetch;
+let geminiCalls = 0;
 globalThis.fetch = async (url) => {
+  geminiCalls += 1;
   assert.ok(String(url).includes("key=server-secret"));
   assert.ok(!String(url).includes("public-should-never-be-used"));
   return {
@@ -51,8 +62,16 @@ globalThis.fetch = async (url) => {
   };
 };
 
-const health = await GET();
-assert.strictEqual((await health.json()).configured, true);
+const healthPost = await POST(
+  new Request("http://localhost/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ health: true }),
+  })
+);
+assert.strictEqual(healthPost.status, 200);
+assert.strictEqual((await healthPost.json()).configured, true);
+assert.strictEqual(geminiCalls, 0);
 
 const ok = await POST(
   new Request("http://localhost/api/gemini", {

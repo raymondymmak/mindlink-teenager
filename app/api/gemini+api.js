@@ -9,12 +9,16 @@ function json(body, status = 200) {
   return Response.json(body, { status });
 }
 
-export async function GET() {
+function healthPayload() {
   const configured = isServerGeminiConfigured();
-  return json({
+  return {
     configured,
     model: configured ? resolveGeminiModel("chat") : null,
-  });
+  };
+}
+
+export async function GET() {
+  return json(healthPayload());
 }
 
 export async function POST(request) {
@@ -44,6 +48,11 @@ export async function POST(request) {
       { error: "Client API keys are not accepted", code: "KEY_NOT_ALLOWED" },
       400
     );
+  }
+
+  // EAS Hosting serves the SPA HTML for GET /api/*, so health is a POST.
+  if (body?.health === true || body?.op === "health") {
+    return json(healthPayload());
   }
 
   try {

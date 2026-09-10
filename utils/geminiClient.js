@@ -78,12 +78,19 @@ export function missingApiKeyError() {
 
 async function probeGeminiHealth() {
   const url = getGeminiApiUrl();
-  const response = await fetch(url, { method: "GET" });
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ health: true }),
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(`Gemini health check failed (${response.status})`);
   }
-  return Boolean(data?.configured);
+  if (typeof data?.configured !== "boolean") {
+    throw new Error("Gemini health check returned an unexpected payload.");
+  }
+  return data.configured;
 }
 
 export async function checkGeminiConfigured() {

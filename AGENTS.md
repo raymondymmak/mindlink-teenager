@@ -33,4 +33,4 @@ If you see the overlay anyway:
 2. Run `node scripts/ensure-dotenv.js`.
 3. Restart Expo with `--reset-cache`.
 4. Do not commit `.env` or print `GEMINI_KEY` / `PINECONE_KEY`.
-5. Never put `GEMINI_KEY` in `EXPO_PUBLIC_*`. Chat/Brief go through `POST /api/gemini`; configured-ness is `GET /api/gemini` `{ configured }`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`.
+5. Never put `GEMINI_KEY` in `EXPO_PUBLIC_*`. Chat/Brief go through `POST /api/gemini`; configured-ness is `POST /api/gemini` `{ "health": true }` → `{ configured }`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`.

@@ -67,9 +67,11 @@ EXPO_PUBLIC_GEMINI_MODEL=auto
 3. Restart Expo. Do **not** put the key in `EXPO_PUBLIC_GEMINI_API_KEY` — Expo inlines those into the web JS.
 
 ```http
-GET  /api/gemini → { "configured": true|false }
+POST /api/gemini { "health": true } → { "configured": true|false }
 POST /api/gemini { "contents", "systemInstruction", "task": "chat"|"brief" } → { "text" }
 ```
+
+EAS Hosting serves the SPA HTML for `GET /api/*`, so configured-ness is a POST like generate. `GET /api/gemini` still works in local Metro.
 
 On web, the client calls same-origin `/api/gemini`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/gemini` unless `EXPO_PUBLIC_GEMINI_API_URL` is set. Demo mode is decided by that health check, not by shipping the key to the browser.
 

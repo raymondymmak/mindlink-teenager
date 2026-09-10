@@ -91,6 +91,13 @@ globalThis.fetch = async (url, options = {}) => {
   const body = JSON.parse(options.body);
   assert.ok(!("apiKey" in body));
   assert.ok(!("key" in body));
+  if (body.health === true) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ configured: true, model: GEMINI_LITE_MODEL }),
+    };
+  }
   assert.strictEqual(body.task, "chat");
   return {
     ok: true,
@@ -104,7 +111,9 @@ resetGeminiConfiguredCache();
 const configured = await checkGeminiConfigured();
 assert.strictEqual(configured, true);
 assert.strictEqual(isGeminiConfigured(), true);
-assert.strictEqual(calls[0].method, "GET");
+assert.strictEqual(calls[0].method, "POST");
+const healthBody = JSON.parse(calls[0].options.body);
+assert.strictEqual(healthBody.health, true);
 
 const text = await generateGeminiText({
   contents: "Reply with exactly: pong",
