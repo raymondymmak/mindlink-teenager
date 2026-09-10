@@ -75,7 +75,7 @@ EAS Hosting serves the SPA HTML for `GET /api/*`, so configured-ness is a POST l
 
 On web, the client calls same-origin `/api/gemini`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/gemini` unless `EXPO_PUBLIC_GEMINI_API_URL` is set. Demo mode is decided by that health check, not by shipping the key to the browser.
 
-**Deploy commands, staging vs production, and URLs:** [DEPLOY.md](./DEPLOY.md). Cursor agents default to **staging**, not `--prod`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`. Put `GEMINI_KEY` on the EAS **preview** (and production) environment as **sensitive**.
+**Deploy is CI-first:** [DEPLOY.md](./DEPLOY.md). Pull requests deploy **staging**; merges to `main` deploy **production**. Cursor agents must not run `eas deploy --prod`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`. Put `GEMINI_KEY` on the EAS **preview** (and production) environment as **sensitive**. GitHub Actions needs repo secret `EXPO_TOKEN`.
 
 `gemini-2.0-flash` is no longer available. Default routing is `auto`: chat/check-ins on `gemini-3.5-flash-lite`, Session Brief on `gemini-3.5-flash`. Pin `EXPO_PUBLIC_GEMINI_MODEL` or server `GEMINI_MODEL` to a specific id (including `gemini-3.6-flash`) to override. If the key is missing or Gemini fails, chat shows a clear error and Session Brief falls back to the on-device demo narrative.
 
@@ -124,7 +124,7 @@ This project does **not** depend on `gemini-middleman` for RAG.
 
 ## Deploy
 
-EAS Hosting is **preview-first**. Cursor agents must deploy to the `staging` alias, not production, unless Raymond explicitly asks. See [DEPLOY.md](./DEPLOY.md).
+EAS Hosting is **CI-first**. Open a PR to `main` for staging; merging to `main` deploys production. Cursor agents must not `eas deploy --prod`. See [DEPLOY.md](./DEPLOY.md).
 
 ## Scripts
 

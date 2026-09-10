@@ -1,0 +1,82 @@
+# EAS Hosting: PRs (and manual runs) → staging alias; push to main → production.
+# Requires GitHub Actions secret EXPO_TOKEN (Expo account access token).
+# Server keys GEMINI_KEY / PINECONE_KEY live on EAS preview + production, not here.
+
+name: EAS Hosting
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: eas-hosting-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+  cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'Deploy production' || 'Deploy staging' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check for EXPO_TOKEN
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "Missing GitHub Actions secret EXPO_TOKEN."
+            echo "Add it under Settings → Secrets and variables → Actions."
+            echo "Create a token at https://expo.dev/settings/access-tokens"
+            echo "Then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export web (Gemini stays server-only)
+        run: |
+          unset EXPO_PUBLIC_GEMINI_API_KEY
+          if [ -n "${EXPO_PUBLIC_GEMINI_API_KEY:-}" ]; then
+            echo "EXPO_PUBLIC_GEMINI_API_KEY must not be set during export."
+            exit 1
+          fi
+          npx expo export -p web
+
+      - name: Deploy staging
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        run: |
+          eas deploy --alias staging --environment preview --non-interactive
+          {
+            echo "## Staging"
+            echo "- Alias: https://raymondmak-app1--staging.expo.app/"
+            echo "- Unique preview URL is in the job log above."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy production
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          eas deploy --prod --environment production --non-interactive
+          {
+            echo "## Production"
+            echo "- https://raymondmak-app1.expo.app/"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -2,7 +2,12 @@
 
 ## Deploy
 
-Default: preview via `eas deploy --alias staging --environment preview --non-interactive` after `npx expo export -p web`. Do **not** use `--prod`. Production (`https://raymondmak-app1.expo.app/`) only with explicit user approval. Full rules: [DEPLOY.md](./DEPLOY.md).
+Open PRs against **`main` only**. GitHub Actions deploys:
+
+- PRs → EAS Hosting **staging** (`https://raymondmak-app1--staging.expo.app/`)
+- merge/push to `main` → **production** (`https://raymondmak-app1.expo.app/`)
+
+Do **not** run `eas deploy --prod`. Do **not** run `eas deploy` unless you are debugging CI (staging only). Full rules and required secrets (`EXPO_TOKEN`, EAS `GEMINI_KEY` / `PINECONE_KEY`): [DEPLOY.md](./DEPLOY.md).
 
 ## Cursor Cloud specific instructions
 
