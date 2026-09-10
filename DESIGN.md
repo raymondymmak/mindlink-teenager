@@ -55,6 +55,8 @@ Type roles:
 - **IBM Plex Sans** — kickers, ledes, tabs, section labels (`h2` / `.label`), helper/disclaimer/note, chips, mood captions, header actions. Small meta must look professional, not mono.
 - **IBM Plex Mono** — `<code>` and numeric IDs (outlined section index). Not tags, not tabs, not body.
 
+Atlas’s own site pairs Grotesk with Plex Mono. After review, **meta stays Plex Sans** so small captions/tabs/labels feel professional — do not put general UI in Mono.
+
 Load via Google Fonts in samples (`_base.css` `@import`). Later Expo: `@expo-google-fonts/space-grotesk`, `@expo-google-fonts/ibm-plex-sans`, and mono only if a code/ID surface needs it.
 
 Sizes: 11px kicker (uppercase, muted, Plex Sans), 13px chrome, 14–15px body (Grotesk), 22px screen title (Grotesk, weight 600, slight negative tracking). Do not use 800-weight colored headings.
