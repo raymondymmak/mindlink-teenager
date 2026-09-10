@@ -1,5 +1,7 @@
 "use strict";
 
+const MOOD_SCALE_MIN = 1;
+const MOOD_SCALE_MAX = 10;
 const LOW_MOOD_THRESHOLD = 4;
 const OBSERVATIONAL_PATTERNS = [
   {
@@ -129,6 +131,476 @@ function asText(value) {
   return String(value || "").trim();
 }
 
+function normalizeMood(raw) {
+  if (raw == null || raw === "") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  return value;
+}
+
+function normalizeTags(raw) {
+  if (raw == null || raw === "") return [];
+  if (Array.isArray(raw)) {
+    return uniqueStrings(raw.flatMap((item) => normalizeTags(item)));
+  }
+  if (typeof raw === "object") {
+    const trueKeys = Object.entries(raw)
+      .filter(([, value]) => value === true)
+      .map(([key]) => asText(key).replace(/^#/, ""));
+    if (trueKeys.length > 0) return uniqueStrings(trueKeys);
+    return uniqueStrings(
+      Object.values(raw).flatMap((item) => normalizeTags(item))
+    );
+  }
+  if (typeof raw !== "string") return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (
+    (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+    (trimmed.startsWith("{") && trimmed.endsWith("}"))
+  ) {
+    try {
+      return normalizeTags(JSON.parse(trimmed));
+    } catch {
+      // Fall through to comma splitting.
+    }
+  }
+  return uniqueStrings(
+    trimmed
+      .split(/[,]+/)
+      .map((part) => part.replace(/^[#\s]+|[.\s]+$/g, "").trim())
+      .filter(Boolean)
+  );
+}
+
+function buildDiaryRecord({
+  date,
+  prompt = "",
+  response = "",
+  mood,
+  tags,
+} = {}) {
+  return {
+    date,
+    prompt: String(prompt || ""),
+    response: String(response || ""),
+    mood: normalizeMood(mood),
+    tags: normalizeTags(tags),
+  };
+}
+
+function parseDiaryRecord(raw, extra = {}) {
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw || {};
+  return {
+    ...parsed,
+    ...extra,
+    date: parsed.date || extra.date || "",
+    prompt: parsed.prompt || "",
+    response: parsed.response || "",
+    mood: normalizeMood(parsed.mood),
+    tags: normalizeTags(parsed.tags ?? parsed.selectedTags ?? parsed.tag),
+  };
+}
+
+function moodScaleDescriptor() {
+  return {
+    min: MOOD_SCALE_MIN,
+    max: MOOD_SCALE_MAX,
+    label: `self-rated journal mood ${MOOD_SCALE_MIN}-${MOOD_SCALE_MAX}`,
+    citation: `n/${MOOD_SCALE_MAX}`,
+  };
+}
+
+const NOT_DISCLOSED = "Not disclosed in conversation";
+const INSUFFICIENT_SCALE =
+  "Insufficient data for a conversation-derived rating. No formal Hamilton instrument was administered. Any HAM-D / HAM-A figure must stay preliminary and grounded in shared conversation only.";
+
+const REPORT_SECTIONS = [
+  { id: "userProfile", number: 1, title: "User Profile" },
+  { id: "presentingConcerns", number: 2, title: "Presenting Concerns" },
+  { id: "moodAffectiveState", number: 3, title: "Mood & Affective State" },
+  { id: "anxietyStressLevels", number: 4, title: "Anxiety & Stress Levels" },
+  { id: "cognitivePerceptualState", number: 5, title: "Cognitive & Perceptual State" },
+  { id: "functioning", number: 6, title: "Functioning" },
+  { id: "headssContextualFactors", number: 7, title: "HEADSS Contextual Factors" },
+  { id: "riskAssessment", number: 8, title: "Risk Assessment" },
+  { id: "strengthsProtectiveFactors", number: 9, title: "Strengths & Protective Factors" },
+  { id: "keyInsights", number: 10, title: "Key Insights & Potential Areas of Concern" },
+  { id: "suggestionsForUser", number: 11, title: "Suggestions for User" },
+];
+
+function constrainMoodScaleLanguage(text) {
+  const max = String(MOOD_SCALE_MAX);
+  return String(text || "")
+    .replace(/\b(\d{1,2})\s*\/\s*5\b/g, `$1/${max}`)
+    .replace(/\b(\d{1,2})\s+out of\s+5\b/gi, `$1 out of ${max}`)
+    .replace(/\b(\d{1,2})\s+out of\s+five\b/gi, `$1 out of ${max}`);
+}
+
+function normalizeSectionBody(value) {
+  const text = constrainMoodScaleLanguage(asText(value));
+  return text || NOT_DISCLOSED;
+}
+
+function emptyReportSections() {
+  const sections = {};
+  REPORT_SECTIONS.forEach((section) => {
+    sections[section.id] = NOT_DISCLOSED;
+  });
+  return sections;
+}
+
+function normalizeKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function sectionKeyAliases(section) {
+  return [
+    section.id,
+    section.title,
+    section.title.replace(/&/g, "and"),
+    String(section.number),
+    `section${section.number}`,
+    `${section.number}${section.title}`,
+  ].map(normalizeKey);
+}
+
+function lookupSectionByHeading(line) {
+  const cleaned = String(line || "")
+    .trim()
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^\*+|\*+$/g, "")
+    .replace(/^(\d{1,2})[.)]\s+/, "")
+    .replace(/:$/, "")
+    .trim();
+  const norm = normalizeKey(cleaned);
+  if (!norm) return null;
+  return (
+    REPORT_SECTIONS.find((section) => {
+      const aliases = sectionKeyAliases(section);
+      return aliases.includes(norm) || aliases.some((alias) => norm.startsWith(alias) || alias.startsWith(norm));
+    }) || null
+  );
+}
+
+function extractJsonObject(text) {
+  const trimmed = String(text || "").trim();
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(trimmed.slice(start, end + 1));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function assignSectionsFromObject(target, raw) {
+  if (!raw || typeof raw !== "object") return 0;
+  let assigned = 0;
+  const keys = Object.keys(raw);
+  REPORT_SECTIONS.forEach((section) => {
+    const aliases = new Set(sectionKeyAliases(section));
+    const match = keys.find((key) => aliases.has(normalizeKey(key)));
+    if (match != null && raw[match] != null && asText(raw[match])) {
+      target[section.id] = normalizeSectionBody(raw[match]);
+      assigned += 1;
+    }
+  });
+  return assigned;
+}
+
+function parseMarkdownReportSections(text) {
+  const sections = emptyReportSections();
+  const lines = String(text || "").split(/\n/);
+  let current = null;
+  const buckets = {};
+  lines.forEach((line) => {
+    const heading = lookupSectionByHeading(line);
+    const looksLikeHeading =
+      heading &&
+      (/^#{1,6}\s+/.test(line.trim()) ||
+        /^\d{1,2}[.)]\s+/.test(line.trim()) ||
+        /^\*\*.+\*\*$/.test(line.trim()));
+    if (heading && looksLikeHeading) {
+      current = heading.id;
+      if (!buckets[current]) buckets[current] = [];
+      return;
+    }
+    if (current) {
+      buckets[current].push(line);
+    }
+  });
+  let assigned = 0;
+  Object.entries(buckets).forEach(([id, bodyLines]) => {
+    const body = normalizeSectionBody(bodyLines.join("\n"));
+    if (body !== NOT_DISCLOSED) {
+      sections[id] = body;
+      assigned += 1;
+    }
+  });
+  return { sections, assigned };
+}
+
+function countFilledSections(sections) {
+  return REPORT_SECTIONS.filter(
+    (section) =>
+      asText(sections?.[section.id]) &&
+      asText(sections[section.id]) !== NOT_DISCLOSED
+  ).length;
+}
+
+function parseStructuredBrief(text) {
+  const sections = emptyReportSections();
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return { sections, rawFallback: "", filled: 0 };
+  }
+
+  const json = extractJsonObject(raw);
+  const jsonAssigned = assignSectionsFromObject(sections, json);
+  if (jsonAssigned >= 4) {
+    return { sections, rawFallback: "", filled: countFilledSections(sections) };
+  }
+
+  const markdown = parseMarkdownReportSections(raw);
+  if (markdown.assigned >= 4) {
+    return {
+      sections: markdown.sections,
+      rawFallback: "",
+      filled: countFilledSections(markdown.sections),
+    };
+  }
+
+  if (jsonAssigned > 0) {
+    return { sections, rawFallback: "", filled: countFilledSections(sections) };
+  }
+
+  return {
+    sections: emptyReportSections(),
+    rawFallback: constrainMoodScaleLanguage(raw),
+    filled: 0,
+  };
+}
+
+function formatReportSectionsMarkdown(sections) {
+  return REPORT_SECTIONS.map((section) => {
+    const body = normalizeSectionBody(sections?.[section.id]);
+    return `## ${section.number}. ${section.title}\n${body}`;
+  }).join("\n\n");
+}
+
+function signalsById(analysis, ids) {
+  return (analysis?.observationalSignals || []).filter((signal) =>
+    ids.includes(signal.id)
+  );
+}
+
+function hasSafetyLanguage(analysis) {
+  const haystack = [
+    analysis?.criticalQuote?.quote,
+    ...(analysis?.textPreview || []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return /suicid|kill myself|end my life|self-harm|self harm|hurt myself|better off dead/.test(
+    haystack
+  );
+}
+
+function buildLocalReportSections(analysis = {}, { reason } = {}) {
+  const sections = emptyReportSections();
+  const name = analysis.userName || "User";
+  const mood = analysis.moodSummary || {};
+  const themes = analysis.themes || [];
+  const tags = Object.keys(analysis.tagFrequency || {});
+  const quote = asText(analysis.criticalQuote?.quote);
+  const moodSignals = signalsById(analysis, [
+    "low_mood",
+    "anhedonia",
+    "sleep",
+    "energy",
+    "appetite",
+    "hopelessness",
+  ]);
+  const anxietySignals = signalsById(analysis, ["anxiety"]);
+  const cognitiveSignals = signalsById(analysis, ["concentration"]);
+  const functionSignals = signalsById(analysis, ["school", "peers", "family"]);
+
+  sections.userProfile = `Preferred name (on-device): ${name}. Age and gender: ${NOT_DISCLOSED}.`;
+
+  const concernBits = [];
+  if (themes.length) {
+    concernBits.push(`Key issues from stored notes: ${themes.join("; ")}.`);
+  }
+  if (tags.length) {
+    concernBits.push(
+      `Diary tags selected: ${tags.map((tag) => `#${tag}`).join(", ")}.`
+    );
+  }
+  if (quote) {
+    concernBits.push(`In their words: "${quote}"`);
+  }
+  sections.presentingConcerns = concernBits.length
+    ? `${concernBits.join(" ")} ${INSUFFICIENT_SCALE}`
+    : INSUFFICIENT_SCALE;
+
+  const moodBits = [];
+  if (mood.count > 0) {
+    moodBits.push(
+      `Self-rated journal mood (1–10): average ${mood.average}/${MOOD_SCALE_MAX} (range ${mood.min}–${mood.max}) across ${mood.count} day(s). ${mood.trend}`
+    );
+  }
+  if (moodSignals.length) {
+    moodBits.push(
+      `User-reported wording mentioned: ${moodSignals
+        .map((signal) => signal.label)
+        .join("; ")}.`
+    );
+  }
+  sections.moodAffectiveState = moodBits.length
+    ? `${moodBits.join(" ")} These are observations from stored notes, not a PHQ-9, BDI-Y, or DIGFAST administration.`
+    : NOT_DISCLOSED;
+
+  const anxietyBits = [];
+  if (anxietySignals.length || tags.includes("anxiety")) {
+    anxietyBits.push(
+      "User-reported worry or anxiety appears in diary tags and/or wording."
+    );
+  }
+  if (analysis.correlations?.summary) {
+    anxietyBits.push(analysis.correlations.summary);
+  }
+  sections.anxietyStressLevels = anxietyBits.length
+    ? `${anxietyBits.join(" ")} ${INSUFFICIENT_SCALE}`
+    : INSUFFICIENT_SCALE;
+
+  sections.cognitivePerceptualState = cognitiveSignals.length
+    ? `User-reported concentration difficulty (${cognitiveSignals[0].mentionCount} mention(s) in ${cognitiveSignals[0].sources.join(", ")}). No unusual thought content or perceptual disturbance was disclosed.`
+    : "No concentration, decision-making, or perceptual disturbance was disclosed in stored notes.";
+
+  const functionBits = uniqueStrings([
+    ...functionSignals.map((signal) => signal.label),
+    ...tags
+      .filter((tag) => ["school", "friends", "family"].includes(tag))
+      .map((tag) => `#${tag}`),
+  ]);
+  sections.functioning = functionBits.length
+    ? `Impact described in stored notes: ${functionBits.join("; ")}.`
+    : NOT_DISCLOSED;
+
+  const headss = [];
+  if (tags.includes("family") || functionSignals.some((signal) => signal.id === "family")) {
+    headss.push("Home: family mentioned.");
+  }
+  if (tags.includes("school") || functionSignals.some((signal) => signal.id === "school")) {
+    headss.push("Education: school mentioned.");
+  }
+  if (tags.includes("friends")) {
+    headss.push("Activities / social: friends mentioned.");
+  }
+  if (signalsById(analysis, ["hopelessness"]).length) {
+    headss.push(
+      "Suicide/Safety: hopelessness wording was present; no plan or intent was disclosed."
+    );
+  }
+  sections.headssContextualFactors = headss.length
+    ? headss.join(" ")
+    : NOT_DISCLOSED;
+
+  if (hasSafetyLanguage(analysis)) {
+    sections.riskAssessment =
+      "User-reported language may indicate self-harm or suicidal thinking. Review the original wording. Level of concern: elevated based on wording only — this is not an SBQ-R score. Other Risks: not disclosed unless listed in stored notes.";
+  } else if (signalsById(analysis, ["hopelessness"]).length) {
+    sections.riskAssessment =
+      "Suicidal Ideation/Self-Harm: hopelessness was mentioned; no plan, intent, or self-harm history was disclosed. Level of concern: monitor. Other Risks: not disclosed in conversation.";
+  } else {
+    sections.riskAssessment =
+      "Suicidal Ideation/Self-Harm: no thoughts, plans, intent, or history were disclosed in stored conversation or diary text. Other Risks: not disclosed in conversation.";
+  }
+
+  const strengths = [];
+  if (tags.includes("friends")) {
+    strengths.push("Peer contact (friends tag) is a possible social support.");
+  }
+  if (mood.max != null && mood.max >= 7) {
+    strengths.push(
+      `At least one journal day was rated ${mood.max}/${MOOD_SCALE_MAX}.`
+    );
+  }
+  sections.strengthsProtectiveFactors = strengths.length
+    ? strengths.join(" ")
+    : NOT_DISCLOSED;
+
+  sections.keyInsights = [
+    themes.length ? `Salient themes: ${themes.join("; ")}.` : null,
+    analysis.correlations?.summary,
+    reason
+      ? `Local demo brief (${reason}). Preliminary, conversation-derived impressions only — not a diagnosis.`
+      : "Preliminary, conversation-derived impressions only — not a diagnosis.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const suggestions = [];
+  if (signalsById(analysis, ["sleep"]).length) {
+    suggestions.push(
+      "If offered in chat, MindLink may have suggested a steadier sleep routine."
+    );
+  }
+  if (tags.includes("school") || functionSignals.some((signal) => signal.id === "school")) {
+    suggestions.push(
+      "School stress: break work into smaller steps and name one trusted adult at school."
+    );
+  }
+  if (anxietySignals.length || tags.includes("anxiety")) {
+    suggestions.push(
+      "Worry: notice the thought, then one grounding or breathing step."
+    );
+  }
+  suggestions.push(
+    "If distress rises, contact a trusted adult or local crisis support. This app is not emergency care."
+  );
+  sections.suggestionsForUser = suggestions.join(" ");
+
+  return sections;
+}
+
+function buildSynthesisPrompt(analysis) {
+  const keys = REPORT_SECTIONS.map((section) => `"${section.id}"`).join(", ");
+  return `Write the 11-section preliminary clinician report using ONLY this on-device analysis. Do not invent biography, diagnoses, or events.
+
+Journal mood scale (mandatory):
+- Every value in moodTrajectory / moodSummary is a self-rated journal mood from ${MOOD_SCALE_MIN} (lowest) to ${MOOD_SCALE_MAX} (highest).
+- Cite mood only as n/${MOOD_SCALE_MAX} (example: 3/${MOOD_SCALE_MAX}).
+- Never rescale, convert, or describe mood as x/5, "out of 5", "/5", or a 5-point scale.
+- A stored score of 3 means 3/${MOOD_SCALE_MAX}, not 3/5.
+
+Diary tags:
+- tagFrequency counts tags the teen selected on journal entries (school, family, friends, anxiety, procrastination, lonely, etc.).
+- Use only those tags. If tagFrequency is empty, say no diary tags were selected.
+
+HAM-D / HAM-A:
+- These are preliminary conversation-derived conceptual ratings, not administered instruments or diagnoses.
+- Give two numbers plus a short explanation only when stored conversation/diary text can support them.
+- Otherwise write: Insufficient data for a conversation-derived rating.
+
+Required JSON keys (return ONLY this object):
+${keys}
+
+If a section has no evidence, set it to exactly: ${NOT_DISCLOSED}
+
+Do not use the old v2 report slots (Mood trajectory, Recurring themes, Stressors on lower-mood days, Notable quote, Observational signals, Suggested opening questions) as the report body.
+
+Structured observations:
+${JSON.stringify(analysis, null, 2)}`;
+}
+
 function collectUserTexts({ entries = [], checkIns = [], summaries = [] }) {
   const texts = [];
   entries.forEach((entry) => {
@@ -137,8 +609,8 @@ function collectUserTexts({ entries = [], checkIns = [], summaries = [] }) {
         source: "diary",
         date: entry.date,
         text: asText(entry.response),
-        mood: entry.mood,
-        tags: entry.tags || [],
+        mood: normalizeMood(entry.mood),
+        tags: normalizeTags(entry.tags ?? entry.selectedTags ?? entry.tag),
       });
     }
   });
@@ -167,11 +639,11 @@ function collectUserTexts({ entries = [], checkIns = [], summaries = [] }) {
 
 function getMoodTrajectory(entries = []) {
   return entries
-    .filter((entry) => entry.mood != null && entry.date)
     .map((entry) => ({
       date: entry.date,
-      mood: Number(entry.mood),
+      mood: normalizeMood(entry.mood),
     }))
+    .filter((entry) => entry.mood != null && entry.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
@@ -208,10 +680,8 @@ function summarizeMood(trajectory) {
 function getTagFrequency(entries = []) {
   const tagCounts = {};
   entries.forEach((entry) => {
-    (entry.tags || []).forEach((tag) => {
-      const key = String(tag).replace(/^#/, "");
-      if (!key) return;
-      tagCounts[key] = (tagCounts[key] || 0) + 1;
+    normalizeTags(entry.tags ?? entry.selectedTags ?? entry.tag).forEach((tag) => {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
   return tagCounts;
@@ -323,7 +793,7 @@ function lowMoodStressors(entries = []) {
     date: entry.date,
     mood: entry.mood,
     text: asText(entry.response).slice(0, 160),
-    tags: entry.tags || [],
+    tags: normalizeTags(entry.tags ?? entry.selectedTags ?? entry.tag),
   }));
   const topTags = Object.entries(tags)
     .sort((a, b) => b[1] - a[1])
@@ -364,6 +834,7 @@ function analyzeLocalSignals({
       checkIns: checkIns.length,
       chatReports: summaries.length,
     },
+    moodScale: moodScaleDescriptor(),
     moodTrajectory,
     moodSummary,
     tagFrequency,
@@ -403,57 +874,49 @@ function buildOpeningQuestions(analysis) {
   return uniqueStrings(questions).slice(0, 2);
 }
 
-function buildMockSessionBrief(analysis, { reason } = {}) {
-  const { moodSummary, themes, correlations, criticalQuote } = analysis;
-  const themeText =
-    themes.length > 0 ? themes.join("; ") : "no repeated themes yet";
-  const quoteText = criticalQuote.quote
-    ? `They wrote: "${criticalQuote.quote}"`
-    : "No longer user quote was available.";
-  const questions = (analysis.openingQuestions || buildOpeningQuestions(analysis))
-    .map((question) => `- ${question}`)
-    .join("\n");
-  const moodLine =
-    moodSummary.count > 0
-      ? `Self-rated journal mood across ${moodSummary.count} day(s): average ${moodSummary.average}/10 (range ${moodSummary.min}–${moodSummary.max}). ${moodSummary.trend}`
-      : "No journal mood scores are stored yet.";
-
-  return [
-    `${analysis.userName || "The teen"} has ${analysis.dataSources.diaryEntries} journal day(s), ${analysis.dataSources.checkIns} check-in(s), and ${analysis.dataSources.chatReports} chat report(s) on this device.`,
-    moodLine,
-    `Themes that stand out: ${themeText}. ${correlations.summary}`,
-    quoteText,
-    "",
-    `## Suggested opening questions`,
-    questions,
-    "",
-    reason
-      ? `_Local demo brief (${reason}). Not a diagnosis._`
-      : `_Local demo brief synthesized on-device. Not a diagnosis._`,
-  ].join("\n");
+function resolveReportSections(narrativeOrSections) {
+  if (
+    narrativeOrSections &&
+    typeof narrativeOrSections === "object" &&
+    !Array.isArray(narrativeOrSections)
+  ) {
+    if (narrativeOrSections.sections) {
+      return {
+        sections: { ...emptyReportSections(), ...narrativeOrSections.sections },
+        rawFallback: narrativeOrSections.rawFallback || "",
+      };
+    }
+    if (narrativeOrSections.userProfile != null) {
+      const sections = emptyReportSections();
+      assignSectionsFromObject(sections, narrativeOrSections);
+      return { sections, rawFallback: "" };
+    }
+  }
+  return parseStructuredBrief(String(narrativeOrSections || ""));
 }
 
-function formatSessionBriefMarkdown(analysis, narrative) {
+function buildMockSessionBrief(analysis, { reason } = {}) {
+  return formatReportSectionsMarkdown(
+    buildLocalReportSections(analysis, { reason })
+  );
+}
+
+function formatSessionBriefMarkdown(analysis, narrativeOrSections) {
   const sources = analysis.dataSources || {};
+  const resolved = resolveReportSections(narrativeOrSections);
   const moodLines =
     (analysis.moodTrajectory || []).length > 0
       ? analysis.moodTrajectory
-          .map((item) => `- ${item.date}: ${item.mood}/10`)
+          .map((item) => `- ${item.date}: ${item.mood}/${MOOD_SCALE_MAX}`)
           .join("\n")
       : "- No journal mood scores available.";
-  const themeLines =
-    (analysis.themes || []).length > 0
-      ? analysis.themes.map((theme) => `- ${theme}`).join("\n")
-      : "- Not enough tagged or repeated topics yet.";
-  const signalLines =
-    (analysis.observationalSignals || []).length > 0
-      ? analysis.observationalSignals
-          .map(
-            (signal) =>
-              `- ${signal.label} (mentioned in ${signal.sources.join(", ")}; ${signal.mentionCount} match${signal.mentionCount === 1 ? "" : "es"})`
-          )
-          .join("\n")
-      : "- No PHQ-adjacent phrases were detected in the stored user text.";
+  const tagEntries = Object.entries(analysis.tagFrequency || {}).sort(
+    (a, b) => b[1] - a[1]
+  );
+  const tagLines =
+    tagEntries.length > 0
+      ? tagEntries.map(([tag, count]) => `- #${tag}: ${count}`).join("\n")
+      : "- No diary tags selected yet.";
   const quoteLine = analysis.criticalQuote?.quote
     ? `"${analysis.criticalQuote.quote}"`
     : "No user quote was long enough to extract.";
@@ -463,31 +926,29 @@ function formatSessionBriefMarkdown(analysis, narrative) {
     `Preferred name: ${analysis.userName || "User"}`,
     `Generated: ${new Date(analysis.generatedAt || Date.now()).toLocaleString()}`,
     `Sources: ${sources.diaryEntries || 0} journal entries, ${sources.checkIns || 0} check-ins, ${sources.chatReports || 0} chat reports.`,
+    `Preliminary clinician report using the 11-section MindLink harness. HAM-D / HAM-A figures, if present, are conversation-derived conceptual ratings — not administered instruments or diagnoses. Journal mood is self-rated ${MOOD_SCALE_MIN}–${MOOD_SCALE_MAX}.`,
     "",
-    `## Mood trajectory`,
-    moodLines,
-    analysis.moodSummary?.count
-      ? `Average ${analysis.moodSummary.average}/10 (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
+    formatReportSectionsMarkdown(resolved.sections),
+    resolved.rawFallback
+      ? `\n## Unstructured model notes\n${resolved.rawFallback}`
       : "",
     "",
-    `## Recurring themes`,
-    themeLines,
+    `## Appendix — local source panels`,
+    `### Mood trajectory`,
+    `Journal mood is self-rated ${MOOD_SCALE_MIN}–${MOOD_SCALE_MAX} (never a 5-point scale).`,
+    moodLines,
+    analysis.moodSummary?.count
+      ? `Average ${analysis.moodSummary.average}/${MOOD_SCALE_MAX} (range ${analysis.moodSummary.min}–${analysis.moodSummary.max}). ${analysis.moodSummary.trend}`
+      : "",
     "",
-    `## Stressors on lower-mood days`,
-    analysis.correlations?.summary || "Not available from on-device data.",
+    `### Diary tags`,
+    tagLines,
     "",
-    `## Notable quote`,
+    `### Notable quote`,
     quoteLine,
     "",
-    `## Observational signals from user-reported text`,
-    "These are keyword matches from journal/check-in wording, not a PHQ-9 or other scored instrument.",
-    signalLines,
-    "",
-    `## Clinician notes`,
-    (narrative || "").trim(),
-    "",
     `---`,
-    `This brief is a synthesis of data the teen stored on this device. It is not a clinical assessment, diagnosis, or risk score.`,
+    `This brief is a synthesis of data the teen stored on this device. It is not a clinical assessment, diagnosis, or formal risk score.`,
   ]
     .filter((line) => line !== "")
     .join("\n");
@@ -498,6 +959,55 @@ function hasEnoughBriefData({ entries = [], checkIns = [], summaries = [] }) {
   const hasCheckIn = checkIns.some((item) => (item.messages || []).some((msg) => msg.role === "user" && msg.text));
   const hasReport = summaries.some((item) => asText(item.content));
   return hasDiary || hasCheckIn || hasReport;
+}
+
+function formatTeenMoodGlance(moodSummary, moodTrajectory = []) {
+  const recent = (moodTrajectory || []).slice(-7);
+  if (!moodSummary || moodSummary.count === 0 || recent.length === 0) {
+    return {
+      headline: "No mood notes yet",
+      detail:
+        "Save a diary entry with a 1–10 mood and a glance will show up here.",
+      recent: [],
+    };
+  }
+  const chips = recent.map((item) => `${item.mood}/10`);
+  return {
+    headline:
+      recent.length === 1
+        ? `Latest mood: ${recent[0].mood}/10`
+        : `Around ${moodSummary.average}/10 lately`,
+    detail: `Recent: ${chips.join(" · ")}`,
+    recent,
+  };
+}
+
+function buildTeenWeekCard(analysis = {}) {
+  const sources = analysis.dataSources || {};
+  const topTags = Object.entries(analysis.tagFrequency || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([tag, count]) => ({ tag, count }));
+  const readyForSession =
+    (sources.diaryEntries || 0) > 0 ||
+    (sources.checkIns || 0) > 0 ||
+    (sources.chatReports || 0) > 0;
+  const moodGlance = formatTeenMoodGlance(
+    analysis.moodSummary,
+    analysis.moodTrajectory
+  );
+  return {
+    title: "My week",
+    moodGlance,
+    topTags,
+    readyForSession,
+    readyTitle: "Ready for session?",
+    readyBody: readyForSession
+      ? "Yes — you've saved notes this week."
+      : "Not yet — write in Diary or Chat first.",
+    entryCount: sources.diaryEntries || 0,
+    checkInCount: sources.checkIns || 0,
+  };
 }
 
 function buildLocalChatReport(cleanedMessages = [], userName = "User") {
@@ -527,11 +1037,11 @@ function buildLocalKeyPoints(cleanedMessages = []) {
   if (userTurns.length === 0) {
     return {
       title1: "Keep checking in",
-      point1: "A short daily note about mood, sleep, or school is enough to start a Session Brief.",
-      title2: "Tags help the brief",
+      point1: "A short daily note about mood, sleep, or school is enough to start.",
+      title2: "Tags help you look back",
       point2: "In the diary, add tags such as school, family, or anxiety so themes are easier to scan.",
-      title3: "Share with a clinician",
-      point3: "The Session Brief can be copied or shared as plain text from the Brief tab.",
+      title3: "Share when you are ready",
+      point3: "Your notes stay on this device. A clinician can open their view from the top of the app.",
     };
   }
   return {
@@ -548,12 +1058,27 @@ function buildLocalKeyPoints(cleanedMessages = []) {
 }
 
 module.exports = {
+  MOOD_SCALE_MIN,
+  MOOD_SCALE_MAX,
   LOW_MOOD_THRESHOLD,
+  NOT_DISCLOSED,
+  INSUFFICIENT_SCALE,
+  REPORT_SECTIONS,
+  normalizeMood,
+  normalizeTags,
+  buildDiaryRecord,
+  parseDiaryRecord,
+  constrainMoodScaleLanguage,
+  buildSynthesisPrompt,
   analyzeLocalSignals,
   buildMockSessionBrief,
+  buildLocalReportSections,
+  parseStructuredBrief,
+  formatReportSectionsMarkdown,
   buildOpeningQuestions,
   formatSessionBriefMarkdown,
   hasEnoughBriefData,
+  buildTeenWeekCard,
   buildLocalChatReport,
   buildLocalKeyPoints,
   getMoodTrajectory,

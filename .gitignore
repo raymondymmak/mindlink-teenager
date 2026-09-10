@@ -33,6 +33,8 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+# Secret-free Metro stub — required so expo/virtual/env.js is not an empty context.
+!.env.development
 
 # typescript
 *.tsbuildinfo

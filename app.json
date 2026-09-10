@@ -22,7 +22,18 @@
       },
       "edgeToEdgeEnabled": true
     },
+    "scheme": "mindlink",
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://raymondmak-app1.expo.app"
+        }
+      ],
+      "expo-font"
+    ],
     "web": {
+      "output": "server",
       "favicon": "./assets/favicon.png",
       "meta": {
         "viewport": "width=device-width, height=device-height, initial-scale=1, maximum-scale=1.0, user-scalable=no"

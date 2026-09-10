@@ -9,17 +9,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Keyboard,
   SafeAreaView,
   Alert,
   Linking,
-  Dimensions,
   Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SYSTEM_INSTRUCTION from "../utils/systemInstruction";
-import { Button } from "react-native-elements";
-import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  buildContextQueryFromMessages,
+  withClinicalContext,
+} from "../utils/contextApi";
+import { generateGeminiText, checkGeminiConfigured } from "../utils/geminiClient";
 import {
   loadDailyChatMessages,
   readStoredText,
@@ -27,6 +28,7 @@ import {
   saveCheckIn,
   saveDailyChatMessages,
 } from "../utils/localData";
+import { colors, fonts, radius } from "../utils/theme";
 
 const DailyChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
@@ -37,7 +39,6 @@ const DailyChatScreen = ({ navigation }) => {
   const [userName, setUserName] = useState("");
   const [crisisModalVisible, setCrisisModalVisible] = useState(false);
   const [crisisModalShown, setCrisisModalShown] = useState(false);
-  const { height: screenHeight, width: screenWidth } = Dimensions.get("window");
 
   // Crisis keywords that trigger the modal
   const crisisKeywords = [
@@ -63,13 +64,6 @@ const DailyChatScreen = ({ navigation }) => {
 
   // Helper function to create unique IDs - simplified to use just Date.now()
   const createUniqueId = (prefix) => `${prefix}-${Date.now()}`;
-
-  // Set up the header with a button
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: null, // Remove the "View Report" button
-    });
-  }, [navigation]);
 
   // Fetch user name and load messages
   useEffect(() => {
@@ -125,22 +119,20 @@ const DailyChatScreen = ({ navigation }) => {
     }
   }, [messages]);
 
-  const startSessionBrief = async (currentMessages = messages) => {
+  const saveCheckInForSession = async (currentMessages = messages) => {
     try {
       await saveCheckIn(currentMessages);
       await requestBriefGeneration();
-      const cleanedMessages = currentMessages.map((msg) => ({
-        role: msg.user?._id === 1 ? "user" : "model",
-        parts: [{ text: msg.text }],
-      }));
-      navigation.navigate("Reports", {
-        cleanedMessages,
-        isInitialFlow: false,
-        openInsights: true,
-      });
+      const message =
+        "Check-in saved. See My week for a glance, or open Clinician view from the top of the screen.";
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("Saved", message);
+      }
     } catch (error) {
-      console.error("Failed to start Session Brief:", error);
-      Alert.alert("Error", "Could not open Session Brief.");
+      console.error("Failed to save check-in:", error);
+      Alert.alert("Error", "Could not save this check-in.");
     }
   };
 
@@ -193,10 +185,10 @@ const DailyChatScreen = ({ navigation }) => {
         },
       ];
 
-      if (!isGeminiConfigured()) {
+      if (!(await checkGeminiConfigured())) {
         const botMessage = {
           _id: createUniqueId("bot"),
-          text: "Gemini is not configured on this device, so I can't continue the live chat. You can still write a diary entry and generate a Session Brief from the Reports → Brief tab.",
+          text: "Gemini is not configured on the server, so I can't continue the live chat. You can still write a diary entry and open Clinician view from the top of the screen.",
           createdAt: new Date(),
           user: {
             _id: 2,
@@ -221,10 +213,14 @@ const DailyChatScreen = ({ navigation }) => {
         console.error("Failed to load latest report:", err);
       }
 
+      const { systemInstruction } = await withClinicalContext(
+        `${SYSTEM_INSTRUCTION}\n\n\n${userName}${latestReport}`,
+        buildContextQueryFromMessages(formattedContents)
+      );
       const botResponse = (
         await generateGeminiText({
           contents: formattedContents,
-          systemInstruction: `${SYSTEM_INSTRUCTION}\n\n\n${userName}${latestReport}`,
+          systemInstruction,
         })
       ).trim();
 
@@ -256,25 +252,25 @@ const DailyChatScreen = ({ navigation }) => {
           if (Platform.OS === "web") {
             if (
               window.confirm(
-                "Create a Session Brief from today's check-in?"
+                "Save today's check-in?"
               )
             ) {
               setMessages((currentMessages) => {
-                startSessionBrief(currentMessages);
+                saveCheckInForSession(currentMessages);
                 return currentMessages;
               });
             }
           } else {
             Alert.alert(
-              "Create Session Brief?",
-              "Generate a clinician Session Brief from today's check-in?",
+              "Save check-in?",
+              "Keep today's chat so it can show in My week and clinician view?",
               [
                 { text: "Not Yet", style: "cancel" },
                 {
                   text: "Yes, Please",
                   onPress: () => {
                     setMessages((currentMessages) => {
-                      startSessionBrief(currentMessages);
+                      saveCheckInForSession(currentMessages);
                       return currentMessages;
                     });
                   },
@@ -299,7 +295,11 @@ const DailyChatScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      const detail = error?.message ? ` (${error.message})` : "";
+      Alert.alert(
+        "Gemini unavailable",
+        `Live chat could not continue${detail}. You can still write a diary entry and open Clinician view from the top of the screen.`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -313,7 +313,7 @@ const DailyChatScreen = ({ navigation }) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         // Handle bold text
         return (
-          <Text key={`bold-${boldIndex}`} style={{ fontWeight: "bold" }}>
+          <Text key={`bold-${boldIndex}`} style={{ fontFamily: fonts.bodyMedium }}>
             {part.slice(2, -2)}
           </Text>
         );
@@ -337,7 +337,7 @@ const DailyChatScreen = ({ navigation }) => {
               return (
                 <Text
                   key={`phone-${boldIndex}-${phoneIndex}`}
-                  style={{ color: "#007bff", textDecorationLine: "underline" }}
+                  style={{ color: colors.accent, textDecorationLine: "underline" }}
                   onPress={() =>
                     Linking.openURL(`tel:${subPart.replace(/\s/g, "")}`)
                   }
@@ -388,37 +388,10 @@ const DailyChatScreen = ({ navigation }) => {
         animationType="fade"
         onRequestClose={hideCrisisModal}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: 16,
-              padding: 24,
-              width: "85%",
-              alignItems: "center",
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 20,
-                fontWeight: "bold",
-                marginBottom: 12,
-                color: "#d32f2f",
-                textAlign: "center",
-              }}
-            >
-              If you are in crisis:
-            </Text>
-            <Text
-              style={{ fontSize: 16, marginBottom: 16, textAlign: "center" }}
-            >
+        <View style={styles.crisisOverlay}>
+          <View style={styles.crisisCard}>
+            <Text style={styles.crisisTitle}>If you are in crisis:</Text>
+            <Text style={styles.crisisLead}>
               Please reach out immediately to a trusted adult or one of these
               24/7 hotlines:
             </Text>
@@ -426,52 +399,36 @@ const DailyChatScreen = ({ navigation }) => {
               onPress={() => {
                 Linking.openURL("tel:28960000");
               }}
-              style={{ marginBottom: 8 }}
+              style={styles.crisisLinkWrap}
             >
-              <Text
-                style={{
-                  color: "#1976d2",
-                  fontSize: 16,
-                  textDecorationLine: "underline",
-                }}
-              >
+              <Text style={styles.crisisLink}>
                 Suicide Prevention Hotline:{" "}
-                <Text style={{ fontWeight: "bold" }}>2896 0000</Text>
+                <Text style={styles.crisisLinkStrong}>2896 0000</Text>
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
                 Linking.openURL("tel:23820000");
               }}
-              style={{ marginBottom: 16 }}
+              style={styles.crisisLinkWrapLast}
             >
-              <Text
-                style={{
-                  color: "#1976d2",
-                  fontSize: 16,
-                  textDecorationLine: "underline",
-                }}
-              >
+              <Text style={styles.crisisLink}>
                 Samaritans 24hr Hotline:{" "}
-                <Text style={{ fontWeight: "bold" }}>2382 0000</Text>
+                <Text style={styles.crisisLinkStrong}>2382 0000</Text>
               </Text>
             </TouchableOpacity>
-            <Text
-              style={{
-                fontSize: 15,
-                color: "#333",
-                marginBottom: 16,
-                textAlign: "center",
-              }}
-            >
+            <Text style={styles.crisisBody}>
               If you feel unsafe, please call emergency services (999) or go to
               the nearest hospital.
             </Text>
-            <Button
-              title="I Understand"
+            <TouchableOpacity
               onPress={hideCrisisModal}
-              buttonStyle={{ backgroundColor: "#007bff", borderRadius: 8 }}
-            />
+              style={styles.crisisUnderstand}
+              accessibilityRole="button"
+              accessibilityLabel="I Understand"
+            >
+              <Text style={styles.crisisUnderstandText}>I Understand</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -510,9 +467,9 @@ const DailyChatScreen = ({ navigation }) => {
             <View style={styles.inputContainer}>
               <TouchableOpacity
                 style={styles.briefInlineButton}
-                onPress={() => startSessionBrief(messages)}
+                onPress={() => saveCheckInForSession(messages)}
               >
-                <Text style={styles.briefLinkText}>Brief</Text>
+                <Text style={styles.briefLinkText}>Save</Text>
               </TouchableOpacity>
               <TextInput
                 style={[
@@ -522,7 +479,7 @@ const DailyChatScreen = ({ navigation }) => {
                 value={inputMessage}
                 onChangeText={setInputMessage}
                 placeholder="Type your message..."
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.muted}
                 editable={!isLoading}
                 multiline={true}
                 onContentSizeChange={(event) => {
@@ -537,7 +494,7 @@ const DailyChatScreen = ({ navigation }) => {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={colors.surface} />
                 ) : (
                   <Text style={styles.sendButtonText}>Send</Text>
                 )}
@@ -572,9 +529,9 @@ const DailyChatScreen = ({ navigation }) => {
 
               <TouchableOpacity
                 style={styles.briefLink}
-                onPress={() => startSessionBrief(messages)}
+                onPress={() => saveCheckInForSession(messages)}
               >
-                <Text style={styles.briefLinkText}>Create Session Brief</Text>
+                <Text style={styles.briefLinkText}>Save check-in</Text>
               </TouchableOpacity>
               <View style={styles.mobileInputContainer}>
                 <TextInput
@@ -585,7 +542,7 @@ const DailyChatScreen = ({ navigation }) => {
                   value={inputMessage}
                   onChangeText={setInputMessage}
                   placeholder="Type your message..."
-                  placeholderTextColor="#999"
+                  placeholderTextColor={colors.muted}
                   editable={!isLoading}
                   multiline={true}
                   onContentSizeChange={(event) => {
@@ -600,7 +557,7 @@ const DailyChatScreen = ({ navigation }) => {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color={colors.surface} />
                   ) : (
                     <Text style={styles.sendButtonText}>Send</Text>
                   )}
@@ -615,14 +572,13 @@ const DailyChatScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  // Web-specific styles
   absoluteContainer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.bg,
     height: "100%",
     width: "100%",
     overflow: "hidden",
@@ -641,15 +597,13 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 64, // Leave space for input container
-    backgroundColor: "#f5f5f5",
+    bottom: 64,
+    backgroundColor: colors.bg,
     overflow: "hidden",
   },
-
-  // Mobile-specific styles
   safeAreaContainer: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.bg,
   },
   keyboardAvoidView: {
     flex: 1,
@@ -661,9 +615,9 @@ const styles = StyleSheet.create({
   mobileInputContainer: {
     flexDirection: "row",
     padding: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
+    borderTopColor: colors.border,
   },
   flatListStyle: {
     flex: 1,
@@ -672,33 +626,37 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 20, // Extra padding at bottom to see last message
+    paddingBottom: 20,
   },
   messageContainer: {
     maxWidth: "80%",
-    padding: 12,
-    borderRadius: 12,
+    padding: 10,
+    borderRadius: radius,
     marginBottom: 8,
   },
   userMessageContainer: {
     alignSelf: "flex-end",
-    backgroundColor: "#007bff",
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   botMessageContainer: {
     alignSelf: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
   },
   userMessageText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
     textAlign: "left",
-    color: "#fff",
+    color: colors.surface,
   },
   botMessageText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
     textAlign: "left",
-    color: "#000",
+    color: colors.text,
   },
   inputContainer: {
     position: "absolute",
@@ -707,31 +665,33 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     padding: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
-    height: 64, // Fixed height for input container
+    borderTopColor: colors.border,
+    height: 64,
   },
   input: {
     flex: 1,
     padding: 12,
-    backgroundColor: "#fff",
-    borderRadius: 25,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
     marginRight: 8,
+    fontFamily: fonts.body,
+    color: colors.text,
   },
   sendButton: {
-    backgroundColor: "#007bff",
-    borderRadius: 25,
+    backgroundColor: colors.accent,
+    borderRadius: radius,
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: "center",
     alignItems: "center",
   },
   sendButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: colors.surface,
+    fontFamily: fonts.bodyMedium,
   },
   briefLink: {
     alignSelf: "center",
@@ -743,9 +703,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   briefLinkText: {
-    color: "#007bff",
-    fontWeight: "600",
-    fontSize: 14,
+    color: colors.accent,
+    fontFamily: fonts.metaMedium,
+    fontSize: 13,
+  },
+  crisisOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  crisisCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius,
+    padding: 24,
+    width: "85%",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  crisisTitle: {
+    fontSize: 20,
+    fontFamily: fonts.title,
+    marginBottom: 12,
+    color: colors.danger,
+    textAlign: "center",
+  },
+  crisisLead: {
+    fontSize: 16,
+    fontFamily: fonts.body,
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  crisisLinkWrap: {
+    marginBottom: 8,
+  },
+  crisisLinkWrapLast: {
+    marginBottom: 16,
+  },
+  crisisLink: {
+    color: colors.accent,
+    fontSize: 16,
+    textDecorationLine: "underline",
+  },
+  crisisLinkStrong: {
+    fontFamily: fonts.bodyMedium,
+  },
+  crisisBody: {
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  crisisUnderstand: {
+    backgroundColor: colors.accent,
+    borderRadius: radius,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  crisisUnderstandText: {
+    color: colors.surface,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 16,
   },
 });
 

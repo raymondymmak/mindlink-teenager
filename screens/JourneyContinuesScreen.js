@@ -8,6 +8,7 @@ import {
   Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { colors, fonts, radius } from "../utils/theme";
 
 const JourneyContinuesScreen = ({ navigation }) => {
   const handleContinue = async () => {
@@ -49,7 +50,7 @@ const JourneyContinuesScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f8fa",
+    backgroundColor: colors.bg,
   },
   contentContainer: {
     flex: 1,
@@ -64,30 +65,32 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2e4057",
+    fontSize: 22,
+    fontFamily: fonts.title,
+    color: colors.text,
     marginBottom: 20,
     textAlign: "center",
+    letterSpacing: -0.4,
   },
   message: {
     fontSize: 16,
-    color: "#555",
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 24,
     textAlign: "center",
     marginBottom: 40,
   },
   button: {
-    backgroundColor: "#007bff",
-    borderRadius: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radius,
     paddingVertical: 12,
     paddingHorizontal: 30,
     alignItems: "center",
   },
   buttonText: {
-    color: "#fff",
+    color: colors.surface,
     fontSize: 16,
-    fontWeight: "bold",
+    fontFamily: fonts.bodyMedium,
   },
 });
 

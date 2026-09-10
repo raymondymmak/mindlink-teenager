@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
-  FlatList,
   ScrollView,
   Alert,
   TouchableOpacity,
@@ -18,8 +17,11 @@ import {
   SYSTEM_INSTRUCTION_SUMMARY,
   SYSTEM_INSTRUCTION_POINTS,
 } from "../utils/systemInstruction";
-import InsightScreen from "./InsightScreen";
-import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  buildContextQueryFromMessages,
+  withClinicalContext,
+} from "../utils/contextApi";
+import { generateGeminiText, checkGeminiConfigured } from "../utils/geminiClient";
 import {
   listSavedReports,
   readStoredText,
@@ -30,6 +32,7 @@ import {
   buildLocalKeyPoints,
 } from "../utils/sessionBriefLogic";
 import { shareOrCopyText } from "../utils/shareText";
+import { colors, fonts, radius } from "../utils/theme";
 
 const SummaryScreen = ({ route, navigation }) => {
   const cleanedMessages = route.params?.cleanedMessages || [];
@@ -45,12 +48,10 @@ const SummaryScreen = ({ route, navigation }) => {
     { key: "general", title: "General" },
     { key: "today", title: "Today" },
     { key: "history", title: "History" },
-    { key: "insights", title: "Brief" },
   ]);
 
   // Check if this is part of the initial flow (called directly from ChatScreen)
   const isInitialFlow = route.params?.isInitialFlow;
-  const openInsights = route.params?.openInsights;
 
   // Fetch user name from AsyncStorage
   useEffect(() => {
@@ -67,12 +68,6 @@ const SummaryScreen = ({ route, navigation }) => {
 
     fetchUserName();
   }, []);
-
-  useEffect(() => {
-    if (openInsights) {
-      setIndex(3);
-    }
-  }, [openInsights]);
 
   // Check for existing reports
   useEffect(() => {
@@ -164,10 +159,14 @@ const SummaryScreen = ({ route, navigation }) => {
           ];
 
           let summaryText = "";
-          if (isGeminiConfigured()) {
+          if (await checkGeminiConfigured()) {
+            const { systemInstruction } = await withClinicalContext(
+              SYSTEM_INSTRUCTION_SUMMARY,
+              buildContextQueryFromMessages(cleanedMessages)
+            );
             summaryText = await generateGeminiText({
               contents: formattedContents,
-              systemInstruction: SYSTEM_INSTRUCTION_SUMMARY,
+              systemInstruction,
             });
           } else {
             summaryText = buildLocalChatReport(cleanedMessages, userName);
@@ -200,7 +199,7 @@ const SummaryScreen = ({ route, navigation }) => {
           ];
 
           let points = "";
-          if (isGeminiConfigured()) {
+          if (await checkGeminiConfigured()) {
             points = await generateGeminiText({
               contents: formattedContents,
               systemInstruction: SYSTEM_INSTRUCTION_POINTS,
@@ -356,7 +355,6 @@ const SummaryScreen = ({ route, navigation }) => {
     general: GeneralTab,
     today: TodayTab,
     history: HistoryTab,
-    insights: InsightScreen,
   });
 
   return (
@@ -373,12 +371,12 @@ const SummaryScreen = ({ route, navigation }) => {
         />
         <View>
           <Text style={styles.headerText}>{userName}</Text>
-          <Text style={styles.headerSubText}>Reports & Session Brief</Text>
+          <Text style={styles.headerSubText}>Your notes from this chat</Text>
         </View>
       </View>
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007bff" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Generating your report...</Text>
         </View>
       ) : (
@@ -397,13 +395,13 @@ const SummaryScreen = ({ route, navigation }) => {
                 {...props}
                 indicatorStyle={styles.tabIndicator}
                 style={styles.tabBar}
-                activeColor="#000000"
-                inactiveColor="#333333"
+                activeColor={colors.text}
+                inactiveColor={colors.muted}
                 renderLabel={({ route, focused }) => (
                   <Text
                     style={[
                       styles.tabLabel,
-                      { color: focused ? "#000000" : "#333333" },
+                      { color: focused ? colors.text : colors.muted },
                     ]}
                   >
                     {route.title}
@@ -441,7 +439,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#fff",
+    backgroundColor: colors.bg,
     height: "100%",
   },
   headerContainer: {
@@ -457,16 +455,16 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   headerText: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#007bff",
+    fontSize: 22,
+    fontFamily: fonts.title,
+    color: colors.text,
     flex: 1,
     flexWrap: "wrap",
   },
   headerSubText: {
-    fontSize: 18,
-    color: "#007bff",
-    fontWeight: "normal",
+    fontSize: 14,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
   loadingContainer: {
     flex: 1,
@@ -475,8 +473,9 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 16,
-    color: "#666",
+    fontSize: 14,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
   tabContainer: {
     flex: 1,
@@ -498,74 +497,72 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   noContentText: {
-    fontSize: 16,
-    color: "#666",
+    fontSize: 15,
+    fontFamily: fonts.meta,
+    color: colors.muted,
     textAlign: "center",
     lineHeight: 24,
   },
   pointContainer: {
     marginBottom: 20,
     padding: 15,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: "#007bff",
+    backgroundColor: colors.surface,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   pointTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#007bff",
+    fontSize: 16,
+    fontFamily: fonts.metaSemi,
+    color: colors.text,
     marginBottom: 8,
   },
   pointContent: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 22,
-  },
-  summaryText: {
-    fontSize: 16,
-    color: "#333",
-    lineHeight: 24,
-    textAlign: "left",
-    padding: 10,
   },
   bottomPadding: {
     height: 60,
   },
   tabBar: {
-    backgroundColor: "#f0f0f0",
+    backgroundColor: colors.bg,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: colors.border,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   tabIndicator: {
-    backgroundColor: "#007bff",
-    height: 3,
+    backgroundColor: colors.text,
+    height: 2,
   },
   tabLabel: {
-    color: "#007bff",
-    fontWeight: "bold",
-    fontSize: 16,
+    color: colors.text,
+    fontFamily: fonts.metaMedium,
+    fontSize: 14,
     textTransform: "capitalize",
   },
   reportItem: {
-    padding: 16,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#007bff",
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 0,
+    marginBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   reportDate: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 15,
+    fontFamily: fonts.bodyMedium,
+    color: colors.text,
   },
   reportSize: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 13,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
   continueButtonContainer: {
     position: "absolute",
@@ -573,67 +570,59 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     padding: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: colors.bg,
   },
   continueButton: {
-    backgroundColor: "#007bff",
-    borderRadius: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radius,
     paddingVertical: 14,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   continueButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    color: colors.surface,
+    fontSize: 16,
+    fontFamily: fonts.bodyMedium,
   },
   shareButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#fff",
-    borderColor: "#007bff",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: radius,
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginBottom: 12,
   },
   shareButtonText: {
-    color: "#007bff",
-    fontWeight: "600",
+    color: colors.text,
+    fontFamily: fonts.metaMedium,
     fontSize: 14,
   },
 });
 
-// Add markdownStyles for custom markdown rendering
 const markdownStyles = {
   body: {
     fontSize: 16,
-    color: "#333",
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 24,
     textAlign: "left",
     padding: 10,
   },
   heading1: {
-    fontSize: 22,
-    color: "#007bff",
-    fontWeight: "bold",
+    fontSize: 20,
+    fontFamily: fonts.title,
+    color: colors.text,
     marginBottom: 8,
   },
   heading2: {
-    fontSize: 20,
-    color: "#007bff",
-    fontWeight: "bold",
+    fontSize: 16,
+    fontFamily: fonts.metaSemi,
+    color: colors.text,
     marginBottom: 6,
   },
   strong: {
-    fontWeight: "bold",
+    fontFamily: fonts.bodyMedium,
   },
   em: {
     fontStyle: "italic",
@@ -646,11 +635,12 @@ const markdownStyles = {
   },
   list_item: {
     fontSize: 16,
-    color: "#333",
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 24,
   },
   link: {
-    color: "#007bff",
+    color: colors.accent,
     textDecorationLine: "underline",
   },
 };

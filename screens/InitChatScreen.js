@@ -12,16 +12,23 @@ import {
   Keyboard,
   SafeAreaView,
   Linking,
-  Dimensions,
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  buildContextQueryFromMessages,
+  withClinicalContext,
+} from "../utils/contextApi";
 import { SYSTEM_INSTRUCTION_INITIAL } from "../utils/systemInstruction";
-import { Button, Header } from "react-native-elements"; // Import Header component
 import * as FileSystem from "expo-file-system"; // Replace RNFS with FileSystem
 import { Asset } from "expo-asset";
-import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import {
+  generateGeminiText,
+  getGeminiModel,
+  checkGeminiConfigured,
+} from "../utils/geminiClient";
 import { requestBriefGeneration, saveCheckIn } from "../utils/localData";
+import { colors, fonts, radius } from "../utils/theme";
 
 const InitChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
@@ -30,20 +37,39 @@ const InitChatScreen = ({ navigation }) => {
   const [inputHeight, setInputHeight] = useState(40); // New state for input height
   const flatListRef = useRef(null);
   const [storedName, setStoredName] = useState("");
-  const { height: screenHeight, width: screenWidth } = Dimensions.get("window"); // Get screen dimensions
 
-  // Set up the header with a button
+  const finishConversationEarly = async () => {
+    await startSessionBrief(messages);
+  };
+
+  // Wrap up early via the same Summary path as a normal end (teen notes, not the clinician Brief).
+  // Do not skip the initial summary by jumping to MainApp/journal.
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={goToMainApp} style={{ marginRight: 12 }}>
-          <Text style={{ color: "#007bff", fontWeight: "600" }}>
-            Skip to journal
+        <TouchableOpacity
+          onPress={finishConversationEarly}
+          style={{ marginRight: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Finish the conversation early"
+          accessibilityHint="Ends this chat and opens the initial summary"
+          {...(Platform.OS === "web"
+            ? { title: "Finish the conversation early" }
+            : {})}
+        >
+          <Text
+            style={{
+              color: colors.accent,
+              fontFamily: fonts.metaMedium,
+              marginRight: 4,
+            }}
+          >
+            Finish early
           </Text>
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, messages]);
 
   useEffect(() => {
     const storedName = "";
@@ -63,15 +89,6 @@ const InitChatScreen = ({ navigation }) => {
     console.log("Stored name:", storedName);
   }, []);
 
-  const goToMainApp = async () => {
-    try {
-      await AsyncStorage.setItem("@initial_chat_completed", "true");
-    } catch (error) {
-      console.error("Failed to mark intro complete:", error);
-    }
-    navigation.navigate("MainApp");
-  };
-
   const startSessionBrief = async (currentMessages = messages) => {
     try {
       await saveCheckIn(currentMessages);
@@ -82,11 +99,10 @@ const InitChatScreen = ({ navigation }) => {
       navigation.navigate("Summary", {
         cleanedMessages,
         isInitialFlow: true,
-        openInsights: true,
       });
     } catch (error) {
-      console.error("Failed to start Session Brief:", error);
-      Alert.alert("Error", "Could not open Session Brief.");
+      console.error("Failed to wrap up chat:", error);
+      Alert.alert("Error", "Could not finish this chat.");
     }
   };
 
@@ -172,7 +188,7 @@ const InitChatScreen = ({ navigation }) => {
     ttl
   ) => {
     const requestBody = {
-      model: "models/gemini-2.0-flash",
+      model: `models/${getGeminiModel()}`,
       contents: [
         {
           parts: [{ file_data: { mime_type: mimeType, file_uri: fileUri } }],
@@ -270,7 +286,7 @@ const InitChatScreen = ({ navigation }) => {
             {
               text: `Hello ${storedName}, welcome to MindLink!
 
-I'm here to be your personal, private guide for exploring your emotions and mental well-being. To start, we'll have a gentle chat to help me understand how best to support you. And when you've shared enough, just press the **"1st Report"** button.
+I'm here to be your personal, private guide for exploring your emotions and mental well-being. To start, we'll have a gentle chat to help me understand how best to support you. When you've shared enough, press **"Finish early"** to wrap up and see your first summary.
 
 Individual conversations will **never** be stored, and summaries and insights are stored securely and locally on your device only. We will **never** share your personal data without your explicit consent! This is a safe, confidential space just for you. By continuing, you agree to our terms of service and privacy policy.
 
@@ -327,7 +343,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
         },
       });
 
-      if (!isGeminiConfigured()) {
+      if (!(await checkGeminiConfigured())) {
         setMessages((prev) => [
           ...prev,
           {
@@ -335,7 +351,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
             role: "model",
             parts: [
               {
-                text: "Gemini is not configured, so live chat is unavailable. Continue to the journal and generate a Session Brief from a diary entry, or add EXPO_PUBLIC_GEMINI_API_KEY and restart Expo.",
+                text: "Gemini is not configured on the server, so live chat is unavailable. Use Finish early to continue to the journal, or set server-only GEMINI_KEY.",
               },
             ],
           },
@@ -343,10 +359,14 @@ So, what do you want to talk about today? You can share anything on your mind, o
         return;
       }
 
+      const { systemInstruction } = await withClinicalContext(
+        SYSTEM_INSTRUCTION_INITIAL,
+        buildContextQueryFromMessages(cleanedMessages)
+      );
       const botReply = (
         await generateGeminiText({
           contents: cleanedMessages,
-          systemInstruction: SYSTEM_INSTRUCTION_INITIAL,
+          systemInstruction,
         })
       ).trim();
       if (botReply.includes("[END_OF_CONVERSATION]")) {
@@ -364,7 +384,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
         setTimeout(() => {
           if (Platform.OS === "web") {
             if (
-              window.confirm("Create your first Session Brief from this chat?")
+              window.confirm("Wrap up this chat and continue?")
             ) {
               setMessages((currentMessages) => {
                 startSessionBrief(currentMessages);
@@ -373,8 +393,8 @@ So, what do you want to talk about today? You can share anything on your mind, o
             }
           } else {
             Alert.alert(
-              "Create Session Brief?",
-              "Generate your first clinician Session Brief from this chat?",
+              "Wrap up this chat?",
+              "Save this check-in and continue to your notes?",
               [
                 { text: "Not Yet", style: "cancel" },
                 {
@@ -400,12 +420,17 @@ So, what do you want to talk about today? You can share anything on your mind, o
       }
     } catch (error) {
       console.error("API Error:", error);
+      const detail = error?.message ? ` (${error.message})` : "";
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString() + "-error",
           role: "model",
-          parts: [{ text: "Sorry, I encountered an error. Please try again." }],
+          parts: [
+            {
+              text: `Gemini was unavailable${detail}. Live chat could not continue. You can still write a diary entry, then open Clinician view from the top of the screen.`,
+            },
+          ],
         },
       ]);
     } finally {
@@ -451,7 +476,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
       if (part.startsWith("**") && part.endsWith("**")) {
         // Handle bold text
         return (
-          <Text key={`bold-${boldIndex}`} style={{ fontWeight: "bold" }}>
+          <Text key={`bold-${boldIndex}`} style={{ fontFamily: fonts.bodyMedium }}>
             {part.slice(2, -2)}
           </Text>
         );
@@ -475,7 +500,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
               return (
                 <Text
                   key={`phone-${boldIndex}-${phoneIndex}`}
-                  style={{ color: "#007bff", textDecorationLine: "underline" }}
+                  style={{ color: colors.accent, textDecorationLine: "underline" }}
                   onPress={() =>
                     Linking.openURL(`tel:${subPart.replace(/\s/g, "")}`)
                   }
@@ -511,23 +536,14 @@ So, what do you want to talk about today? You can share anything on your mind, o
       </Text>
       {/* Show suggested replies if present on this message */}
       {item.suggestedReplies && (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
+        <View style={styles.suggestedReplies}>
           {item.suggestedReplies.map((reply, idx) => (
             <TouchableOpacity
               key={idx}
-              style={{
-                backgroundColor: "#e3eafc",
-                borderRadius: 16,
-                paddingVertical: 6,
-                paddingHorizontal: 14,
-                marginRight: 8,
-                marginBottom: 8,
-              }}
+              style={styles.suggestedReply}
               onPress={() => setInputMessage(reply)}
             >
-              <Text style={{ color: "#007bff", fontWeight: "500" }}>
-                {reply}
-              </Text>
+              <Text style={styles.suggestedReplyText}>{reply}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -572,7 +588,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
             value={inputMessage}
             onChangeText={setInputMessage}
             placeholder="Type your message..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.muted}
             editable={!isLoading}
             multiline={true}
             onContentSizeChange={(event) => {
@@ -587,7 +603,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.surface} />
             ) : (
               <Text style={styles.sendButtonText}>Send</Text>
             )}
@@ -627,7 +643,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
               value={inputMessage}
               onChangeText={setInputMessage}
               placeholder="Type your message..."
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.muted}
               editable={!isLoading}
               multiline={true}
               onContentSizeChange={(event) => {
@@ -642,7 +658,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.surface} />
               ) : (
                 <Text style={styles.sendButtonText}>Send</Text>
               )}
@@ -655,14 +671,13 @@ So, what do you want to talk about today? You can share anything on your mind, o
 };
 
 const styles = StyleSheet.create({
-  // Web-specific styles
   absoluteContainer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.bg,
     height: "100%",
     width: "100%",
     overflow: "hidden",
@@ -681,15 +696,13 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 64, // Leave space for input container
-    backgroundColor: "#f5f5f5",
+    bottom: 64,
+    backgroundColor: colors.bg,
     overflow: "hidden",
   },
-
-  // Mobile-specific styles
   safeAreaContainer: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.bg,
   },
   keyboardAvoidView: {
     flex: 1,
@@ -701,13 +714,13 @@ const styles = StyleSheet.create({
   mobileInputContainer: {
     flexDirection: "row",
     padding: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
+    borderTopColor: colors.border,
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 20, // Extra padding at bottom to see last message
+    paddingBottom: 20,
   },
   flatListStyle: {
     flex: 1,
@@ -716,29 +729,33 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     maxWidth: "80%",
-    padding: 12,
-    borderRadius: 12,
+    padding: 10,
+    borderRadius: radius,
     marginBottom: 8,
   },
   userMessageContainer: {
     alignSelf: "flex-end",
-    backgroundColor: "#007bff",
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   botMessageContainer: {
     alignSelf: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
   },
   userMessageText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
     textAlign: "left",
-    color: "#fff",
+    color: colors.surface,
   },
   botMessageText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
     textAlign: "left",
-    color: "#000",
+    color: colors.text,
   },
   inputContainer: {
     position: "absolute",
@@ -747,31 +764,50 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     padding: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
-    height: 64, // Fixed height for input container
+    borderTopColor: colors.border,
+    height: 64,
   },
   input: {
     flex: 1,
     padding: 12,
-    backgroundColor: "#fff",
-    borderRadius: 25,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
     marginRight: 8,
+    fontFamily: fonts.body,
+    color: colors.text,
   },
   sendButton: {
-    backgroundColor: "#007bff",
-    borderRadius: 25,
+    backgroundColor: colors.accent,
+    borderRadius: radius,
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: "center",
     alignItems: "center",
   },
   sendButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: colors.surface,
+    fontFamily: fonts.bodyMedium,
+  },
+  suggestedReplies: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  suggestedReply: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  suggestedReplyText: {
+    color: colors.accent,
+    fontFamily: fonts.metaMedium,
   },
 });
 

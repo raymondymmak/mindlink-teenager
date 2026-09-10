@@ -1,10 +1,11 @@
 {
   "name": "MindLink (Expo)",
-  "install": "npm ci --legacy-peer-deps",
+  "install": "npm ci --legacy-peer-deps && node scripts/ensure-dotenv.js",
+  "start": "node scripts/ensure-dotenv.js",
   "terminals": [
     {
       "name": "expo-web",
-      "command": "npx expo start --web --port 8081"
+      "command": "node scripts/ensure-dotenv.js && EXPO_PUBLIC_GEMINI_MODEL=\"${EXPO_PUBLIC_GEMINI_MODEL:-auto}\" npx expo start --web --port 8081"
     }
   ],
   "ports": [

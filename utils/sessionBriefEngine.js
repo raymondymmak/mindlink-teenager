@@ -1,10 +1,24 @@
-import { generateGeminiText, isGeminiConfigured } from "./geminiClient";
-import { SYSTEM_INSTRUCTION_SESSION_BRIEF } from "./systemInstruction";
+import {
+  buildContextQueryFromAnalysis,
+  withClinicalContext,
+} from "./contextApi";
+import {
+  generateGeminiText,
+  checkGeminiConfigured,
+} from "./geminiClient";
+import {
+  SYSTEM_INSTRUCTION_SESSION_BRIEF,
+  SYSTEM_INSTRUCTION_SUMMARY,
+} from "./systemInstruction";
 import {
   analyzeLocalSignals,
-  buildMockSessionBrief,
+  buildLocalReportSections,
+  buildSynthesisPrompt,
+  constrainMoodScaleLanguage,
+  formatReportSectionsMarkdown,
   formatSessionBriefMarkdown,
   hasEnoughBriefData,
+  parseStructuredBrief,
 } from "./sessionBriefLogic";
 import {
   getCheckIns,
@@ -15,25 +29,16 @@ import {
   saveSessionBriefRecord,
 } from "./localData";
 
-function buildSynthesisPrompt(analysis) {
-  return `Write a concise Session Brief for a psychiatrist using ONLY this on-device analysis. Do not invent diagnoses, scale scores, or events.
+function sessionBriefSystemInstruction() {
+  return `${SYSTEM_INSTRUCTION_SUMMARY}\n\n${SYSTEM_INSTRUCTION_SESSION_BRIEF}`;
+}
 
-Structured observations:
-${JSON.stringify(analysis, null, 2)}
-
-Required markdown sections:
-## Mood trajectory
-## Recurring themes
-## Stressors on lower-mood days
-## Notable quote
-## Observational signals from user-reported text
-## Suggested opening questions
-
-Rules:
-- Mood numbers may be cited only if present in moodTrajectory / moodSummary.
-- Observational signals are keyword mentions, not PHQ-9 or HAM scores.
-- If a section has no data, say it is not available from on-device data.
-- End with a one-line reminder that this is not a diagnosis.`;
+function applyMoodConstraintToSections(sections) {
+  const next = {};
+  Object.entries(sections || {}).forEach(([key, value]) => {
+    next[key] = constrainMoodScaleLanguage(value);
+  });
+  return next;
 }
 
 export async function loadSessionBriefInputs() {
@@ -58,41 +63,57 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
 
   const analysis = analyzeLocalSignals(inputs);
   let mode = "local-demo";
-  let narrative;
+  let sections;
+  let rawFallback = "";
   let warning = null;
 
-  if (!forceLocal && isGeminiConfigured()) {
+  const geminiReady = await checkGeminiConfigured();
+  if (!forceLocal && geminiReady) {
     try {
-      narrative = await generateGeminiText({
+      const { systemInstruction } = await withClinicalContext(
+        sessionBriefSystemInstruction(),
+        buildContextQueryFromAnalysis(analysis)
+      );
+      const raw = await generateGeminiText({
         contents: buildSynthesisPrompt(analysis),
-        systemInstruction: SYSTEM_INSTRUCTION_SESSION_BRIEF,
+        systemInstruction,
+        task: "brief",
       });
+      const parsed = parseStructuredBrief(raw);
+      sections = applyMoodConstraintToSections(parsed.sections);
+      rawFallback = constrainMoodScaleLanguage(parsed.rawFallback || "");
       mode = "gemini";
     } catch (error) {
       warning =
         error?.code === "MISSING_API_KEY"
           ? error.message
           : `Gemini was unavailable (${error.message}). Showing an on-device demo brief instead.`;
-      narrative = buildMockSessionBrief(analysis, {
+      sections = buildLocalReportSections(analysis, {
         reason: "Gemini fallback",
       });
     }
   } else {
-    warning = isGeminiConfigured()
+    warning = geminiReady
       ? null
-      : "No EXPO_PUBLIC_GEMINI_API_KEY found. This is an on-device demo brief using the same clinician structure.";
-    narrative = buildMockSessionBrief(analysis, {
+      : "Gemini is not configured on the server (GEMINI_KEY). This is an on-device demo brief using the same clinician structure.";
+    sections = buildLocalReportSections(analysis, {
       reason: "API key not configured",
     });
   }
 
-  const markdown = formatSessionBriefMarkdown(analysis, narrative);
+  const narrative = formatReportSectionsMarkdown(sections);
+  const markdown = formatSessionBriefMarkdown(analysis, {
+    sections,
+    rawFallback,
+  });
   const record = await saveSessionBriefRecord({
     mode,
     warning,
     markdown,
     analysis,
     narrative,
+    sections,
+    rawFallback,
   });
 
   return record;

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindLink — Chat (sample)</title>
+    <link rel="stylesheet" href="_base.css" />
+  </head>
+  <body>
+    <div class="app" style="height: 100vh">
+      <header class="topbar">
+        <div class="topbar-title">Chat</div>
+        <div class="topbar-actions">
+          <button type="button" class="btn-text">Finish early</button>
+          <button type="button" class="btn btn-ghost">Show clinician view</button>
+          <button type="button" class="btn btn-danger">Reset Demo</button>
+        </div>
+      </header>
+      <div class="sample-strip">
+        Static samples
+        <nav class="sample-nav" aria-label="Static samples">
+          <a href="teen-diary.html">Diary</a>
+          <a href="chat.html" aria-current="page">Chat</a>
+          <a href="clinician-brief.html">Brief</a>
+        </nav>
+      </div>
+
+      <div class="chat-main">
+        <div class="transcript">
+          <p class="note">
+            Intro chat: <strong>Finish early</strong> wraps to the teen summary, then Home —
+            it does not open the clinician Brief. After Home, this tab keeps
+            <strong>Show clinician view</strong> next to red <strong>Reset Demo</strong>.
+            RAG still runs as <code>POST /api/context</code> before each Gemini turn.
+          </p>
+
+          <div class="bubble">
+            Hi Alex. I’m here as a private guide for exploring how you’ve been
+            feeling. We can take this slowly. When you’ve shared enough, press
+            Finish early to wrap up.
+          </div>
+          <div class="bubble bubble-user">
+            Kind of tired. I have a test tomorrow and I can’t stop checking the
+            ranking.
+          </div>
+          <div class="bubble">
+            That sounds exhausting — school pressure sitting on loop. What happens
+            in your body when you refresh that ranking?
+          </div>
+          <div class="bubble bubble-user">
+            Stomach drop. Then I tell myself I’m behind everyone.
+          </div>
+        </div>
+
+        <form class="composer" action="#" onsubmit="return false">
+          <button type="button" class="btn btn-ghost">Save</button>
+          <textarea class="field" rows="1" placeholder="Message"></textarea>
+          <button type="submit" class="btn btn-accent">Send</button>
+        </form>
+      </div>
+    </div>
+  </body>
+</html>
