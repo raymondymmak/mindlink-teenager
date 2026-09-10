@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindLink — Diary (sample)</title>
+    <link rel="stylesheet" href="_base.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar-title">Diary</div>
+        <div class="topbar-actions">
+          <button type="button" class="btn btn-ghost">Show clinician view</button>
+          <button type="button" class="btn btn-danger">Reset Demo</button>
+        </div>
+      </header>
+      <div class="sample-strip">
+        Static samples
+        <nav class="sample-nav" aria-label="Static samples">
+          <a href="teen-diary.html" aria-current="page">Diary</a>
+          <a href="chat.html">Chat</a>
+          <a href="clinician-brief.html">Brief</a>
+        </nav>
+      </div>
+
+      <main class="main">
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab" role="tab" aria-selected="true">Write</button>
+          <button type="button" class="tab" role="tab" aria-selected="false">History</button>
+        </div>
+
+        <p class="kicker">Teen view</p>
+        <h1 style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em">
+          Hello, Alex
+        </h1>
+        <p class="lede">Thursday, 10 September 2026</p>
+
+        <div class="prompt">
+          How did you sleep last night? How is your energy level today?
+        </div>
+
+        <label class="label" for="entry">Today’s note</label>
+        <textarea class="field" id="entry">
+Slept maybe five hours. Woke up already thinking about the maths test. Lunch was fine with Mei but I went quiet after she asked if I’m okay. Not really. I keep refreshing the class ranking like that will help.
+        </textarea>
+
+        <div class="card" style="margin-top: 16px">
+          <div class="mood-row">
+            <label class="label" for="mood" style="margin: 0">Mood</label>
+            <span class="mood-value">3 / 10</span>
+          </div>
+          <input id="mood" type="range" min="1" max="10" step="1" value="3" />
+          <div class="mood-ends"><span>1</span><span>10</span></div>
+        </div>
+
+        <div class="card">
+          <div class="label">Tags</div>
+          <div class="chips">
+            <button type="button" class="chip is-on">school</button>
+            <button type="button" class="chip">family</button>
+            <button type="button" class="chip">friends</button>
+            <button type="button" class="chip is-on">anxiety</button>
+            <button type="button" class="chip">procrastination</button>
+            <button type="button" class="chip">lonely</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px">
+          <button type="button" class="btn btn-accent btn-lg">Save entry</button>
+        </div>
+
+        <p class="muted" style="margin-top: 12px; font-size: 13px">
+          Same on-device store the clinician Brief reads. My week stays a glance —
+          not the 11-section report.
+        </p>
+
+        <section class="card" style="margin-top: 24px" aria-label="History preview">
+          <div class="label">Recent entries</div>
+          <div class="history-row">
+            <span>Thu, Sep 10, 2026</span>
+            <span class="muted">3/10 · school, anxiety</span>
+          </div>
+          <div class="history-row">
+            <span>Wed, Sep 9, 2026</span>
+            <span class="muted">5/10 · friends</span>
+          </div>
+          <div class="history-row">
+            <span>Mon, Sep 7, 2026</span>
+            <span class="muted">4/10 · school, family</span>
+          </div>
+        </section>
+      </main>
+
+      <nav class="tabbar" aria-label="Teen tabs">
+        <a href="teen-diary.html" aria-current="page">Diary</a>
+        <a href="chat.html">Chat</a>
+        <a href="teen-diary.html#week">My week</a>
+      </nav>
+    </div>
+  </body>
+</html>

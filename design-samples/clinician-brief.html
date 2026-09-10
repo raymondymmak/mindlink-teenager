@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindLink — Session Brief (sample)</title>
+    <link rel="stylesheet" href="_base.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar-title">Session Brief</div>
+        <div class="topbar-actions">
+          <button type="button" class="btn btn-ghost">Show teen view</button>
+          <button type="button" class="btn btn-danger">Reset Demo</button>
+        </div>
+      </header>
+      <div class="sample-strip">
+        Static samples
+        <nav class="sample-nav" aria-label="Static samples">
+          <a href="teen-diary.html">Diary</a>
+          <a href="chat.html">Chat</a>
+          <a href="clinician-brief.html" aria-current="page">Brief</a>
+        </nav>
+      </div>
+
+      <div class="split">
+        <section class="split-pane" aria-label="Session Brief">
+          <p class="kicker">Clinician view</p>
+          <h1 style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em">
+            Session Brief
+          </h1>
+          <p class="lede">
+            Same on-device diary, tags, and check-ins as Teen mode. This is a lens,
+            not a second database. Mood remains 1–10.
+          </p>
+
+          <p class="note">
+            Synthesized with Gemini when a key is set; otherwise the local
+            11-section harness. Optional RAG context is prepended via
+            <code>POST /api/context</code>. Missing evidence stays
+            “Not disclosed in conversation” — sections do not reshuffle.
+          </p>
+
+          <div class="actions">
+            <button type="button" class="btn btn-accent">Regenerate Session Brief</button>
+            <button type="button" class="btn btn-ghost">Copy / Share</button>
+          </div>
+
+          <p class="muted" style="font-size: 13px; margin-bottom: 16px">
+            3 journal entries · 1 check-in · self-rated mood avg 4/10 (range 3–5).
+            Slight downward trend on school days.
+          </p>
+
+          <div class="report">
+            <article class="card">
+              <div class="report-head">
+                <span class="num">1</span>
+                <div>
+                  <h2>User Profile</h2>
+                  <p class="body">
+                    Alex, Hong Kong secondary student. Notes focus on exam ranking,
+                    sleep debt, and a close peer (Mei). No diagnosis is implied.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">2</span>
+                <div>
+                  <h2>Presenting Concerns</h2>
+                  <p class="disclaimer">
+                    HAM-D / HAM-A figures, if shown, are preliminary and
+                    conversation-derived — not administered instruments.
+                  </p>
+                  <p class="body">
+                    Anticipatory worry about a maths test; compulsive checking of
+                    class ranking; going quiet with friends when asked if they are
+                    okay.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">3</span>
+                <div>
+                  <h2>Mood &amp; Affective State</h2>
+                  <p class="body">
+                    Self-ratings 3–5/10 this week, lowest (3/10) on 10 Sep after
+                    poor sleep. Language: “stomach drop”, “behind everyone”.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">4</span>
+                <div>
+                  <h2>Anxiety &amp; Stress Levels</h2>
+                  <p class="disclaimer">
+                    HAM-D / HAM-A figures, if shown, are preliminary and
+                    conversation-derived — not administered instruments.
+                  </p>
+                  <p class="body">
+                    School-linked anxiety tags on two of three diary days.
+                    Somatic cue reported in chat (stomach drop when refreshing ranking).
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">5</span>
+                <div>
+                  <h2>Cognitive &amp; Perceptual State</h2>
+                  <p class="body">
+                    Rumination loop around class rank. No perceptual disturbance
+                    described.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">6</span>
+                <div>
+                  <h2>Functioning</h2>
+                  <p class="body">
+                    Sleep ~5 hours before the low-mood day. Still attending school
+                    and lunch with a friend.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">7</span>
+                <div>
+                  <h2>HEADSS Contextual Factors</h2>
+                  <p class="body">
+                    Education: exam pressure, ranking. Peers: Mei noticed withdrawal.
+                    Home: tagged once (7 Sep) without detail.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">8</span>
+                <div>
+                  <h2>Risk Assessment</h2>
+                  <p class="body empty">Not disclosed in conversation</p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">9</span>
+                <div>
+                  <h2>Strengths &amp; Protective Factors</h2>
+                  <p class="body">
+                    Named peer (Mei). Still writing diary entries and using check-in
+                    chat. Can describe body cues in plain language.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">10</span>
+                <div>
+                  <h2>Key Insights &amp; Potential Areas of Concern</h2>
+                  <p class="body">
+                    Ranking-checking as a safety behaviour that likely maintains
+                    anxiety. Sleep debt co-occurs with the lowest mood score.
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="report-head">
+                <span class="num">11</span>
+                <div>
+                  <h2>Suggestions for User</h2>
+                  <p class="body">
+                    Collaborative: time-box rank checking the night before a test;
+                    keep the diary tag pair school + anxiety so the next session can
+                    see whether sleep recovers.
+                  </p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <aside class="split-pane" aria-label="Source panels">
+          <p class="kicker">Source panels</p>
+
+          <div class="card">
+            <div class="label">Mood trajectory</div>
+            <p>10 Sep: 3/10</p>
+            <p>9 Sep: 5/10</p>
+            <p>7 Sep: 4/10</p>
+          </div>
+
+          <div class="card">
+            <div class="label">Tag frequency</div>
+            <p>school: 2</p>
+            <p>anxiety: 2</p>
+            <p>friends: 1</p>
+            <p>family: 1</p>
+          </div>
+
+          <div class="card">
+            <div class="label">Key quotes / stressors</div>
+            <p style="font-style: italic; color: var(--muted)">
+              “I keep refreshing the class ranking like that will help.”
+            </p>
+            <p style="margin-top: 12px; font-size: 14px">
+              10 Sep (3/10): Slept maybe five hours. Woke up already thinking about
+              the maths test.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="label">Observational signals</div>
+            <p class="disclaimer">
+              Keyword mentions from user-reported text. Not a PHQ-9 score.
+            </p>
+            <p>Worry / anxiety — 3 mentions in journal, chat</p>
+            <p>Sleep disruption — 1 mention in journal</p>
+            <p>School pressure — 2 mentions in journal</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>

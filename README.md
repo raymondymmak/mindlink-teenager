@@ -10,6 +10,8 @@ MindLink is a mobile application designed to serve as a compassionate and suppor
 
 The hero clinician deliverable is the **Session Brief**: a structured, scannable note synthesized from on-device journal entries, mood/tags, and chat check-ins.
 
+Design system (spec + static HTML samples; Expo UI unchanged until approved): [DESIGN.md](./DESIGN.md).
+
 ## Features
 
 - Personalized AI chat for mental health support and regular check-ins.

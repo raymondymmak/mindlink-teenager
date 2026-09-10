@@ -1,0 +1,171 @@
+# MindLink design system
+
+Static spec for a future visual pass. **Do not restyle the Expo / React Native screens until a human approves the HTML samples.** Behavior stays as it is today.
+
+- Issue: [#22](https://github.com/raymondymmak/mindlink-teenager/issues/22)
+- Visual north star: [EECS Atlas](https://eecs-atlas.sethw.dev/) — clean, paper, destination-first. Not a “wellness app” template.
+- Samples: [`design-samples/`](./design-samples/) (`_base.css`, `teen-diary.html`, `clinician-brief.html`, `chat.html`)
+
+Open the HTML files in a browser (no build). They are not wired into Expo.
+
+---
+
+## Principles
+
+1. **Quiet chrome.** The header is a hairline bar: title on the left, actions on the right. No gradients, blobs, glass, drop shadows, or illustrated mascots.
+2. **One red control.** **Reset Demo** is the only filled danger button. Everything else is stone + one blue accent.
+3. **Mode is a lens.** Teen and Clinician read the same on-device `localData`. The toggle is a ghost button, not a second product.
+4. **Clinical, not cute.** Session Brief looks like a note a psychiatrist can scan in a minute. Teen screens stay friendly without becoming a sticker pack.
+5. **System type.** No Inter / Poppins / Nunito / “AI SaaS” font. Use the platform sans.
+6. **Preserve behavior.** Visual work later must not drop Teen/Clinician, the 11-section Brief harness, tags, mood 1–10, Finish early, Reset, or RAG.
+
+Anti-slop (do not introduce):
+
+- Purple-to-blue gradients, glow, neon, 3D cards, 24px radii, heavy shadows
+- Emoji as UI, “Your AI companion ✨”, auto-playing blobs
+- Dark mode as a first pass (Atlas-like paper is the default)
+- Bootstrap `#007bff` leftover once the restyle lands — samples already use `--accent`
+
+---
+
+## Tokens
+
+Map these 1:1 into React Native `StyleSheet` later. Samples define them in `design-samples/_base.css`.
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `--bg` | `#FAFAF9` | Screen background (stone-50) |
+| `--surface` | `#FFFFFF` | Cards, header, composer |
+| `--text` | `#1C1917` | Primary copy |
+| `--muted` | `#78716C` | Secondary copy, kickers, empty states |
+| `--border` | `#E7E5E4` | Hairline 1px only |
+| `--accent` | `#1D4ED8` | Primary actions, links, selected tags, user bubbles |
+| `--accent-soft` | `#EFF6FF` | Prompt well, selected chip fill, focus ring |
+| `--danger` | `#B91C1C` | **Reset Demo only** (and crisis copy, not chrome) |
+| `--radius` | `8px` | Buttons, cards, inputs, bubbles |
+| `--font` | `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif` | All text |
+
+Spacing: 4 / 8 / 12 / 16 / 24 / 32. Header height 48px. No box-shadow.
+
+Type: 11px kicker (uppercase, muted), 13px chrome, 14–15px body, 22px screen title (weight 600, slight negative tracking). Do not use 800-weight colored headings.
+
+---
+
+## Layout patterns
+
+### Header recipes
+
+**MainApp (Diary, Chat check-in, My week, Clinician):**
+
+`[ screen title ] ……………… [ Show clinician view | Show teen view ] [ Reset Demo ]`
+
+- Mode toggle: ghost, 1px `--border`, 13px, not filled blue.
+- Reset: filled `--danger`, 13px, weight 600. Label stays **Reset Demo**.
+- They sit **next to each other** on the right (`DemoHeaderActions`).
+
+**Intro chat only:**
+
+`[ Chat ] ……………… [ Finish early ]`
+
+- Finish early is accent **text**, not a red button, not a primary fill.
+- It wraps up to the teen **Summary**, then Home. It must **not** open Clinician / Session Brief.
+
+### Teen
+
+- Bottom tabs: Diary · Chat · My week. Active = `--accent` text, inactive = `--muted`. No floating tab pill.
+- **Diary:** greeting + date, prompt in `--accent-soft`, multiline note, mood **1–10** slider with numeric readout, tags as outlined chips (selected = `--accent-soft` + `--accent` text, not inverted white-on-blue pills), Save as filled accent.
+- **My week:** glance only (mood chips, top tags, ready-for-session copy). Never render the 11-section Brief here.
+- **Chat (check-in):** transcript + composer. Optional compact **Save** (check-in) beside the field. User bubble = accent fill; assistant = surface + hairline.
+
+### Clinician
+
+- Same header row; label is **Show teen view**.
+- Wide: Brief column (~1.2) | source panels (~0.9), hairline divider. Narrow: stack Brief then panels.
+- Brief is the **fixed 11-section harness** (order never reshuffles):
+
+  1. User Profile
+  2. Presenting Concerns
+  3. Mood & Affective State
+  4. Anxiety & Stress Levels
+  5. Cognitive & Perceptual State
+  6. Functioning
+  7. HEADSS Contextual Factors
+  8. Risk Assessment
+  9. Strengths & Protective Factors
+  10. Key Insights & Potential Areas of Concern
+  11. Suggestions for User
+
+- Empty section body: italic muted **Not disclosed in conversation**.
+- Sections 2 and 4 may show the HAM-D / HAM-A disclaimer (conversation-derived, not an administered instrument).
+- Section index is a **24px outlined circle**, not a filled blue badge.
+- Source panels stay: mood trajectory (n/10), tag frequency, key quotes / stressors, observational keyword signals (not PHQ scores).
+- Actions: **Generate / Regenerate Session Brief** (accent fill), **Copy / Share** (ghost).
+
+---
+
+## Do / don’t
+
+| Do | Don’t |
+| --- | --- |
+| Hairline `#E7E5E4` borders | 2–3px borders, colored left bars on every card |
+| Reset red; mode toggle ghost | Make Reset blue, or make the mode toggle a filled primary |
+| Mood scale **1–10** everywhere | 1–5, stars, emoji meters |
+| Keep tag set: school, family, friends, anxiety, procrastination, lonely | Invent a new taxonomy in the restyle |
+| One app, two modes | Split into two apps / two stores |
+| System sans | Google Fonts “friendly” families |
+| Crisis copy can use `--danger` text | Red header, red Send, red tabs |
+| Cite Atlas as the density/quiet bar | Clone Atlas copy or course-planner layout |
+
+---
+
+## Implementation notes (future Cursor agents)
+
+When a human says the samples are approved:
+
+1. Read this file and `design-samples/_base.css`. Screenshot the three HTML pages. Match them; do not “improve” the palette.
+2. Touch presentation only: `screens/*`, `components/DemoHeaderActions.js`, `App.js` tab/header options. **Do not** change `utils/localData.js`, `utils/sessionBriefLogic.js` harness keys, `utils/sessionBriefEngine.js`, `app/api/context+api.js`, Gemini routing, or storage keys.
+3. Replace `#007bff` / `#2e4057` / `#f5f8fa` with the tokens above. Radius 8. Header actions stay in `DemoHeaderActions` (toggle then Reset).
+4. Intro `InitChatScreen` keeps **Finish early** in `headerRight`. MainApp screens keep toggle + Reset.
+5. Clinician `REPORT_SECTIONS` order and empty string stay. Wide split already exists in `ClinicianHomeScreen` (`width >= 960`).
+6. Web: keep `usePinWebPathToRoot` and the Expo Router shell. Do not add CSS imports that break native.
+7. Verify: save diary with tags + mood 3/10 → My week glance → Show clinician view → 11 sections + panels → Show teen view → Finish early on intro still goes Summary → Home → Reset Demo clears and returns to Welcome. Chat/Brief still call `POST /api/context` when configured.
+8. Do not print `GEMINI_KEY` / `PINECONE_KEY`. Do not restyle as part of an unrelated PR.
+
+React Native mapping sketch (later):
+
+```js
+export const tokens = {
+  bg: "#FAFAF9",
+  surface: "#FFFFFF",
+  text: "#1C1917",
+  muted: "#78716C",
+  border: "#E7E5E4",
+  accent: "#1D4ED8",
+  accentSoft: "#EFF6FF",
+  danger: "#B91C1C",
+  radius: 8,
+};
+```
+
+---
+
+## Out of scope
+
+- Restyling Expo / React Native in the same change as this spec (this repo change is docs + static HTML only)
+- New features, new Brief sections, new tags, new mood scale
+- Dark mode, i18n pass, custom icon font, design-package dependency
+- Production deploy (docs-only; do not `eas deploy`)
+- Changing RAG, Gemini models, or env handling (see `AGENTS.md` for Metro `.env`)
+- Copying Atlas course-planner IA into MindLink
+
+---
+
+## Sample index
+
+| File | What to judge |
+| --- | --- |
+| [`design-samples/teen-diary.html`](./design-samples/teen-diary.html) | Hairline cards, mood 1–10, chips, **Show clinician view** beside red **Reset Demo**, teen tabs |
+| [`design-samples/chat.html`](./design-samples/chat.html) | Transcript, composer, **Finish early** as text, same demo actions |
+| [`design-samples/clinician-brief.html`](./design-samples/clinician-brief.html) | 11-section harness, source panels, **Show teen view** + Reset |
+
+Visual implementation is **pending user approval of these samples**.
