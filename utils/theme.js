@@ -25,6 +25,13 @@ const fonts = {
   monoMedium: "IBMPlexMono_500Medium",
 };
 
+const type = {
+  title: { fontFamily: fonts.title, color: colors.text },
+  body: { fontFamily: fonts.body, color: colors.text },
+  meta: { fontFamily: fonts.meta, color: colors.muted },
+  mono: { fontFamily: fonts.mono, color: colors.muted },
+};
+
 const headerScreenOptions = {
   headerStyle: {
     backgroundColor: colors.surface,
@@ -79,6 +86,7 @@ module.exports = {
   colors,
   radius,
   fonts,
+  type,
   headerScreenOptions,
   tabBarScreenOptions,
   createNavigationTheme,

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
-  FlatList,
   ScrollView,
   Alert,
   TouchableOpacity,
@@ -523,14 +522,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.text,
     lineHeight: 22,
-  },
-  summaryText: {
-    fontSize: 16,
-    fontFamily: fonts.body,
-    color: colors.text,
-    lineHeight: 24,
-    textAlign: "left",
-    padding: 10,
   },
   bottomPadding: {
     height: 60,

@@ -46,13 +46,13 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
 }
 
 import WelcomeScreen from "./screens/WelcomeScreen";
-import InitChatScreen from "./screens/InitChatScreen";
-import DailyChatScreen from "./screens/DailyChatScreen";
-import HomeScreen from "./screens/HomeScreen";
+import IntroChatScreen from "./screens/InitChatScreen";
+import CheckInChatScreen from "./screens/DailyChatScreen";
+import DiaryScreen from "./screens/HomeScreen";
 import SummaryScreen from "./screens/SummaryScreen";
 import JourneyContinuesScreen from "./screens/JourneyContinuesScreen";
 import MyWeekScreen from "./screens/MyWeekScreen";
-import ClinicianHomeScreen from "./screens/ClinicianHomeScreen";
+import ClinicianBriefScreen from "./screens/ClinicianHomeScreen";
 import DemoHeaderActions from "./components/DemoHeaderActions";
 import { AppModeProvider, useAppMode } from "./components/AppModeContext";
 import { APP_MODES } from "./utils/appMode";
@@ -99,30 +99,27 @@ function teenTabIcon(routeName, focused) {
   return focused ? "ellipse" : "ellipse-outline";
 }
 
-function MainAppTabs({ navigation }) {
-  const { mode } = useAppMode();
-  const headerRight = () => <DemoHeaderActions navigation={navigation} />;
+function ClinicianSessionShell({ headerRight }) {
+  return (
+    <Tab.Navigator
+      key="clinician"
+      screenOptions={{
+        ...headerScreenOptions,
+        headerShown: true,
+        headerRight,
+        tabBarStyle: { display: "none", height: 0 },
+      }}
+    >
+      <Tab.Screen
+        name="Session"
+        component={ClinicianBriefScreen}
+        options={{ title: "Session Brief" }}
+      />
+    </Tab.Navigator>
+  );
+}
 
-  if (mode === APP_MODES.clinician) {
-    return (
-      <Tab.Navigator
-        key="clinician"
-        screenOptions={{
-          ...headerScreenOptions,
-          headerShown: true,
-          headerRight,
-          tabBarStyle: { display: "none", height: 0 },
-        }}
-      >
-        <Tab.Screen
-          name="Session"
-          component={ClinicianHomeScreen}
-          options={{ title: "Session Brief" }}
-        />
-      </Tab.Navigator>
-    );
-  }
-
+function TeenTabs({ headerRight }) {
   return (
     <Tab.Navigator
       key="teen"
@@ -140,8 +137,8 @@ function MainAppTabs({ navigation }) {
         headerRight,
       })}
     >
-      <Tab.Screen name="Diary" component={HomeScreen} />
-      <Tab.Screen name="Chat" component={DailyChatScreen} />
+      <Tab.Screen name="Diary" component={DiaryScreen} />
+      <Tab.Screen name="Chat" component={CheckInChatScreen} />
       <Tab.Screen
         name="MyWeek"
         component={MyWeekScreen}
@@ -149,6 +146,17 @@ function MainAppTabs({ navigation }) {
       />
     </Tab.Navigator>
   );
+}
+
+function ModeShell({ navigation }) {
+  const { mode } = useAppMode();
+  const headerRight = () => <DemoHeaderActions navigation={navigation} />;
+
+  if (mode === APP_MODES.clinician) {
+    return <ClinicianSessionShell headerRight={headerRight} />;
+  }
+
+  return <TeenTabs headerRight={headerRight} />;
 }
 
 export default function App() {
@@ -168,10 +176,11 @@ export default function App() {
             headerShown: false,
           }}
         >
+          {/* Route names stay Welcome / Chat / Summary / JourneyContinues / MainApp. */}
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen
             name="Chat"
-            component={InitChatScreen}
+            component={IntroChatScreen}
             options={{ headerShown: true, title: "Chat" }}
           />
           <Stack.Screen
@@ -187,7 +196,7 @@ export default function App() {
             name="JourneyContinues"
             component={JourneyContinuesScreen}
           />
-          <Stack.Screen name="MainApp" component={MainAppTabs} />
+          <Stack.Screen name="MainApp" component={ModeShell} />
         </Stack.Navigator>
       </AppModeProvider>
     </HelmetProvider>

@@ -131,7 +131,7 @@ Sizes: 11px kicker (uppercase, muted, Plex Sans), 13px chrome, 14–15px body (G
 
 ## Implementation notes
 
-The samples are **approved**. Expo screens now use `utils/theme.js`.
+The samples are **approved**. Expo screens import `colors`, `fonts`, `type`, and `radius` from `utils/theme.js` — do not paste leftover hex into StyleSheets.
 
 When changing visuals later:
 
@@ -144,24 +144,13 @@ When changing visuals later:
 7. Verify: save diary with tags + mood 3/10 → My week glance → Show clinician view → 11 sections + panels → Show teen view → Finish early on intro still goes Summary → Home → Reset Demo clears and returns to Welcome. Chat/Brief still call `POST /api/context` when configured.
 8. Do not print `GEMINI_KEY` / `PINECONE_KEY`.
 
-React Native mapping sketch (later):
+React Native mapping (`utils/theme.js`):
 
 ```js
-export const tokens = {
-  bg: "#FAFAF9",
-  surface: "#FFFFFF",
-  text: "#1C1917",
-  muted: "#78716C",
-  border: "#E7E5E4",
-  accent: "#1D4ED8",
-  accentSoft: "#EFF6FF",
-  danger: "#B91C1C",
-  radius: 8,
-  font: "SpaceGrotesk_400Regular",
-  fontTitle: "SpaceGrotesk_600SemiBold",
-  fontMeta: "IBMPlexSans_500Medium",
-  fontMono: "IBMPlexMono_400Regular", // code / IDs only
-};
+colors: { bg, surface, text, muted, border, accent, accentSoft, danger }
+fonts: { body, title, meta, mono, … }
+type: { title, body, meta, mono } // fontFamily + color roles
+radius: 8
 ```
 
 ---

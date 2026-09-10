@@ -12,7 +12,6 @@ import {
   Keyboard,
   SafeAreaView,
   Linking,
-  Dimensions,
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -21,7 +20,6 @@ import {
   withClinicalContext,
 } from "../utils/contextApi";
 import { SYSTEM_INSTRUCTION_INITIAL } from "../utils/systemInstruction";
-import { Button, Header } from "react-native-elements"; // Import Header component
 import * as FileSystem from "expo-file-system"; // Replace RNFS with FileSystem
 import { Asset } from "expo-asset";
 import {
@@ -39,7 +37,6 @@ const InitChatScreen = ({ navigation }) => {
   const [inputHeight, setInputHeight] = useState(40); // New state for input height
   const flatListRef = useRef(null);
   const [storedName, setStoredName] = useState("");
-  const { height: screenHeight, width: screenWidth } = Dimensions.get("window"); // Get screen dimensions
 
   const finishConversationEarly = async () => {
     await startSessionBrief(messages);
@@ -539,23 +536,14 @@ So, what do you want to talk about today? You can share anything on your mind, o
       </Text>
       {/* Show suggested replies if present on this message */}
       {item.suggestedReplies && (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
+        <View style={styles.suggestedReplies}>
           {item.suggestedReplies.map((reply, idx) => (
             <TouchableOpacity
               key={idx}
-              style={{
-                backgroundColor: "#e3eafc",
-                borderRadius: 16,
-                paddingVertical: 6,
-                paddingHorizontal: 14,
-                marginRight: 8,
-                marginBottom: 8,
-              }}
+              style={styles.suggestedReply}
               onPress={() => setInputMessage(reply)}
             >
-              <Text style={{ color: colors.accent, fontFamily: fonts.metaMedium }}>
-                {reply}
-              </Text>
+              <Text style={styles.suggestedReplyText}>{reply}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -600,7 +588,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
             value={inputMessage}
             onChangeText={setInputMessage}
             placeholder="Type your message..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.muted}
             editable={!isLoading}
             multiline={true}
             onContentSizeChange={(event) => {
@@ -655,7 +643,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
               value={inputMessage}
               onChangeText={setInputMessage}
               placeholder="Type your message..."
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.muted}
               editable={!isLoading}
               multiline={true}
               onContentSizeChange={(event) => {
@@ -803,6 +791,23 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: colors.surface,
     fontFamily: fonts.bodyMedium,
+  },
+  suggestedReplies: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  suggestedReply: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  suggestedReplyText: {
+    color: colors.accent,
+    fontFamily: fonts.metaMedium,
   },
 });
 

@@ -447,19 +447,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 48,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.bg,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-    fontFamily: fonts.meta,
-    color: colors.muted,
-  },
   kicker: {
     fontSize: 11,
     fontFamily: fonts.metaSemi,

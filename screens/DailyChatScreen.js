@@ -9,16 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Keyboard,
   SafeAreaView,
   Alert,
   Linking,
-  Dimensions,
   Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SYSTEM_INSTRUCTION from "../utils/systemInstruction";
-import { Button } from "react-native-elements";
 import {
   buildContextQueryFromMessages,
   withClinicalContext,
@@ -42,7 +39,6 @@ const DailyChatScreen = ({ navigation }) => {
   const [userName, setUserName] = useState("");
   const [crisisModalVisible, setCrisisModalVisible] = useState(false);
   const [crisisModalShown, setCrisisModalShown] = useState(false);
-  const { height: screenHeight, width: screenWidth } = Dimensions.get("window");
 
   // Crisis keywords that trigger the modal
   const crisisKeywords = [
@@ -392,39 +388,10 @@ const DailyChatScreen = ({ navigation }) => {
         animationType="fade"
         onRequestClose={hideCrisisModal}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderRadius: radius,
-              padding: 24,
-              width: "85%",
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 20,
-                fontFamily: fonts.title,
-                marginBottom: 12,
-                color: colors.danger,
-                textAlign: "center",
-              }}
-            >
-              If you are in crisis:
-            </Text>
-            <Text
-              style={{ fontSize: 16, marginBottom: 16, textAlign: "center" }}
-            >
+        <View style={styles.crisisOverlay}>
+          <View style={styles.crisisCard}>
+            <Text style={styles.crisisTitle}>If you are in crisis:</Text>
+            <Text style={styles.crisisLead}>
               Please reach out immediately to a trusted adult or one of these
               24/7 hotlines:
             </Text>
@@ -432,52 +399,36 @@ const DailyChatScreen = ({ navigation }) => {
               onPress={() => {
                 Linking.openURL("tel:28960000");
               }}
-              style={{ marginBottom: 8 }}
+              style={styles.crisisLinkWrap}
             >
-              <Text
-                style={{
-                  color: colors.accent,
-                  fontSize: 16,
-                  textDecorationLine: "underline",
-                }}
-              >
+              <Text style={styles.crisisLink}>
                 Suicide Prevention Hotline:{" "}
-                <Text style={{ fontFamily: fonts.bodyMedium }}>2896 0000</Text>
+                <Text style={styles.crisisLinkStrong}>2896 0000</Text>
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
                 Linking.openURL("tel:23820000");
               }}
-              style={{ marginBottom: 16 }}
+              style={styles.crisisLinkWrapLast}
             >
-              <Text
-                style={{
-                  color: colors.accent,
-                  fontSize: 16,
-                  textDecorationLine: "underline",
-                }}
-              >
+              <Text style={styles.crisisLink}>
                 Samaritans 24hr Hotline:{" "}
-                <Text style={{ fontFamily: fonts.bodyMedium }}>2382 0000</Text>
+                <Text style={styles.crisisLinkStrong}>2382 0000</Text>
               </Text>
             </TouchableOpacity>
-            <Text
-              style={{
-                fontSize: 15,
-                color: "#333",
-                marginBottom: 16,
-                textAlign: "center",
-              }}
-            >
+            <Text style={styles.crisisBody}>
               If you feel unsafe, please call emergency services (999) or go to
               the nearest hospital.
             </Text>
-            <Button
-              title="I Understand"
+            <TouchableOpacity
               onPress={hideCrisisModal}
-              buttonStyle={{ backgroundColor: colors.accent, borderRadius: radius }}
-            />
+              style={styles.crisisUnderstand}
+              accessibilityRole="button"
+              accessibilityLabel="I Understand"
+            >
+              <Text style={styles.crisisUnderstandText}>I Understand</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -528,7 +479,7 @@ const DailyChatScreen = ({ navigation }) => {
                 value={inputMessage}
                 onChangeText={setInputMessage}
                 placeholder="Type your message..."
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.muted}
                 editable={!isLoading}
                 multiline={true}
                 onContentSizeChange={(event) => {
@@ -543,7 +494,7 @@ const DailyChatScreen = ({ navigation }) => {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={colors.surface} />
                 ) : (
                   <Text style={styles.sendButtonText}>Send</Text>
                 )}
@@ -591,7 +542,7 @@ const DailyChatScreen = ({ navigation }) => {
                   value={inputMessage}
                   onChangeText={setInputMessage}
                   placeholder="Type your message..."
-                  placeholderTextColor="#999"
+                  placeholderTextColor={colors.muted}
                   editable={!isLoading}
                   multiline={true}
                   onContentSizeChange={(event) => {
@@ -606,7 +557,7 @@ const DailyChatScreen = ({ navigation }) => {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color={colors.surface} />
                   ) : (
                     <Text style={styles.sendButtonText}>Send</Text>
                   )}
@@ -755,6 +706,67 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontFamily: fonts.metaMedium,
     fontSize: 13,
+  },
+  crisisOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  crisisCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius,
+    padding: 24,
+    width: "85%",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  crisisTitle: {
+    fontSize: 20,
+    fontFamily: fonts.title,
+    marginBottom: 12,
+    color: colors.danger,
+    textAlign: "center",
+  },
+  crisisLead: {
+    fontSize: 16,
+    fontFamily: fonts.body,
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  crisisLinkWrap: {
+    marginBottom: 8,
+  },
+  crisisLinkWrapLast: {
+    marginBottom: 16,
+  },
+  crisisLink: {
+    color: colors.accent,
+    fontSize: 16,
+    textDecorationLine: "underline",
+  },
+  crisisLinkStrong: {
+    fontFamily: fonts.bodyMedium,
+  },
+  crisisBody: {
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  crisisUnderstand: {
+    backgroundColor: colors.accent,
+    borderRadius: radius,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  crisisUnderstandText: {
+    color: colors.surface,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 16,
   },
 });
 
