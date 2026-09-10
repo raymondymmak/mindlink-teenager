@@ -5,7 +5,7 @@
   "terminals": [
     {
       "name": "expo-web",
-      "command": "node scripts/ensure-dotenv.js && EXPO_PUBLIC_GEMINI_API_KEY=\"${GEMINI_KEY:-}\" EXPO_PUBLIC_GEMINI_MODEL=\"${EXPO_PUBLIC_GEMINI_MODEL:-auto}\" npx expo start --web --port 8081"
+      "command": "node scripts/ensure-dotenv.js && EXPO_PUBLIC_GEMINI_MODEL=\"${EXPO_PUBLIC_GEMINI_MODEL:-auto}\" npx expo start --web --port 8081"
     }
   ],
   "ports": [

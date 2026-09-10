@@ -1,22 +1,41 @@
-import { GoogleGenAI } from "@google/genai";
+import { useEffect, useState } from "react";
 
-// Gemini Developer API has no "auto" model id. `auto` is in-app routing:
-// chat / check-ins / key points → Flash-Lite; Session Brief → Flash.
-// gemini-3.6-flash is still valid but currently quota-exhausted on this key.
+export const SAME_ORIGIN_GEMINI_PATH = "/api/gemini";
+export const PRODUCTION_GEMINI_API_URL =
+  "https://raymondmak-app1.expo.app/api/gemini";
+export const DEFAULT_GEMINI_API_URL = PRODUCTION_GEMINI_API_URL;
+
 export const GEMINI_LITE_MODEL = "gemini-3.5-flash-lite";
 export const GEMINI_STANDARD_MODEL = "gemini-3.5-flash";
 export const DEFAULT_GEMINI_MODEL = "auto";
-const GEMINI_REST_BASE =
-  "https://generativelanguage.googleapis.com/v1beta/models";
 
-export function getGeminiApiKey() {
-  const key = (
-    process.env.EXPO_PUBLIC_GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_KEY ||
-    ""
-  ).trim();
-  return key;
+const DEFAULT_TIMEOUT_MS = 20000;
+
+let configuredCache = null;
+let configuredPromise = null;
+
+function normalizeGeminiUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value === SAME_ORIGIN_GEMINI_PATH || /\/api\/gemini\/?$/.test(value)) {
+    return value.replace(/\/$/, "") || SAME_ORIGIN_GEMINI_PATH;
+  }
+  return `${value.replace(/\/$/, "")}${SAME_ORIGIN_GEMINI_PATH}`;
+}
+
+/**
+ * Resolve this project's Gemini proxy.
+ * Web prefers same-origin `/api/gemini`. Never reads Gemini API keys.
+ */
+export function getGeminiApiUrl() {
+  const configured = normalizeGeminiUrl(
+    process.env.EXPO_PUBLIC_GEMINI_API_URL || ""
+  );
+  if (configured) return configured;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${SAME_ORIGIN_GEMINI_PATH}`;
+  }
+  return DEFAULT_GEMINI_API_URL;
 }
 
 function envModelOverride() {
@@ -39,206 +58,145 @@ export function getGeminiModel() {
   return resolveGeminiModel("chat");
 }
 
+export function resetGeminiConfiguredCache() {
+  configuredCache = null;
+  configuredPromise = null;
+}
+
 export function isGeminiConfigured() {
-  return Boolean(getGeminiApiKey());
+  return configuredCache === true;
 }
 
 export function missingApiKeyError() {
   const error = new Error(
-    "Gemini API key is not set. Add EXPO_PUBLIC_GEMINI_API_KEY to a local .env file and restart Expo."
+    "Gemini is not configured on the server. Set GEMINI_KEY (server-only) and restart."
   );
   error.code = "MISSING_API_KEY";
+  error.status = 503;
   return error;
 }
 
-function withTimeout(promise, ms, label) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      const error = new Error(`${label} timed out after ${ms}ms`);
-      error.code = "TIMEOUT";
-      error.status = 503;
-      reject(error);
-    }, ms);
+async function probeGeminiHealth() {
+  const url = getGeminiApiUrl();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ health: true }),
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-function isRetryableGeminiError(error) {
-  const status = error?.status;
-  const message = String(error?.message || "").toLowerCase();
-  return (
-    status === 429 ||
-    status === 503 ||
-    error?.code === "TIMEOUT" ||
-    message.includes("exceeded your current quota") ||
-    message.includes("resource_exhausted") ||
-    message.includes("high demand") ||
-    message.includes("unavailable") ||
-    message.includes("timed out")
-  );
-}
-
-function normalizeContents(contents) {
-  if (typeof contents === "string") {
-    return [{ role: "user", parts: [{ text: contents }] }];
-  }
-  if (!Array.isArray(contents)) {
-    return [];
-  }
-  return contents
-    .map((item) => {
-      if (!item) return null;
-      if (typeof item === "string") {
-        return { role: "user", parts: [{ text: item }] };
-      }
-      const text =
-        item.parts?.[0]?.text ??
-        item.text ??
-        (typeof item.parts === "string" ? item.parts : "");
-      if (!text) return null;
-      return {
-        role: item.role === "model" ? "model" : "user",
-        parts: [{ text }],
-      };
-    })
-    .filter(Boolean);
-}
-
-function extractRestText(data) {
-  const parts = data?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts
-    .map((part) => part?.text || "")
-    .join("")
-    .trim();
-}
-
-async function generateWithSdk({
-  apiKey,
-  model,
-  contents,
-  systemInstruction,
-}) {
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await withTimeout(
-    ai.models.generateContent({
-      model,
-      contents,
-      config: systemInstruction
-        ? { systemInstruction }
-        : undefined,
-    }),
-    12000,
-    `Gemini SDK (${model})`
-  );
-  return (response?.text || "").trim();
-}
-
-async function generateWithRest({
-  apiKey,
-  model,
-  contents,
-  systemInstruction,
-}) {
-  const url = `${GEMINI_REST_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const body = { contents };
-  if (systemInstruction) {
-    body.systemInstruction = {
-      parts: [{ text: systemInstruction }],
-    };
-  }
-
-  const response = await withTimeout(
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-    12000,
-    `Gemini REST (${model})`
-  );
-
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      data?.error?.message ||
-      `Gemini API request failed (${response.status})`;
-    const error = new Error(message);
-    error.code = "GEMINI_HTTP_ERROR";
-    error.status = response.status;
-    throw error;
+    throw new Error(`Gemini health check failed (${response.status})`);
   }
+  if (typeof data?.configured !== "boolean") {
+    throw new Error("Gemini health check returned an unexpected payload.");
+  }
+  return data.configured;
+}
 
-  const text = extractRestText(data);
-  if (!text) {
-    throw new Error("Gemini returned an empty response.");
+export async function checkGeminiConfigured() {
+  if (configuredCache !== null) {
+    return configuredCache;
   }
-  return text;
+  if (!configuredPromise) {
+    configuredPromise = probeGeminiHealth()
+      .then((configured) => {
+        configuredCache = configured;
+        return configured;
+      })
+      .catch(() => {
+        configuredPromise = null;
+        return false;
+      });
+  }
+  return configuredPromise;
+}
+
+export function useGeminiConfigured() {
+  const [state, setState] = useState({
+    configured: isGeminiConfigured(),
+    ready: configuredCache !== null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    checkGeminiConfigured().then((configured) => {
+      if (!cancelled) {
+        setState({ configured, ready: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return state;
 }
 
 /**
- * Call the Gemini Developer API directly from the Expo app.
- * Prefers `@google/genai`; falls back to the official REST endpoint if the
- * SDK cannot run in this environment (common on React Native).
- *
- * task: "chat" (Flash-Lite) or "brief" (Flash). Ignored when
- * EXPO_PUBLIC_GEMINI_MODEL is a specific model id.
+ * POST { contents, systemInstruction, task } to this project's /api/gemini.
+ * The server holds GEMINI_KEY. The client never embeds or sends an API key.
  */
 export async function generateGeminiText({
   contents,
   systemInstruction,
   task = "chat",
 } = {}) {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    throw missingApiKeyError();
-  }
+  const url = getGeminiApiUrl();
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+    : null;
 
-  const preferred = resolveGeminiModel(task);
-  const models = [preferred];
-  if (isAutoGeminiRouting() && task === "brief" && preferred !== GEMINI_LITE_MODEL) {
-    models.push(GEMINI_LITE_MODEL);
-  }
-
-  const normalized = normalizeContents(contents);
-  if (normalized.length === 0) {
-    throw new Error("No conversation content was provided to Gemini.");
-  }
-
-  let lastError;
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index];
-    try {
-      const text = await generateWithSdk({
-        apiKey,
-        model,
-        contents: normalized,
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents,
         systemInstruction,
-      });
-      if (text) return text;
-      throw new Error("Gemini SDK returned an empty response.");
-    } catch (sdkError) {
-      if (sdkError?.code === "MISSING_API_KEY") {
-        throw sdkError;
-      }
-      try {
-        return await generateWithRest({
-          apiKey,
-          model,
-          contents: normalized,
-          systemInstruction,
-        });
-      } catch (restError) {
-        lastError = restError;
-        const hasFallback = index < models.length - 1;
-        if (!hasFallback || !isRetryableGeminiError(restError)) {
-          throw restError;
-        }
-      }
+        task,
+      }),
+      signal: controller?.signal,
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (typeof data?.configured === "boolean") {
+      configuredCache = data.configured;
     }
+
+    if (!response.ok) {
+      if (data?.code === "MISSING_API_KEY") {
+        configuredCache = false;
+        const error = missingApiKeyError();
+        if (data?.error) error.message = data.error;
+        throw error;
+      }
+      const error = new Error(
+        data?.error || `Gemini API request failed (${response.status})`
+      );
+      error.code = data?.code || "GEMINI_HTTP_ERROR";
+      error.status = response.status;
+      throw error;
+    }
+
+    const text = typeof data?.text === "string" ? data.text.trim() : "";
+    if (!text) {
+      throw new Error("Gemini returned an empty response.");
+    }
+    configuredCache = true;
+    return text;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeout = new Error("Gemini request timed out.");
+      timeout.code = "TIMEOUT";
+      timeout.status = 503;
+      throw timeout;
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  throw lastError || new Error("Gemini request failed.");
 }
 
 export function getGeminiStatusLabel() {

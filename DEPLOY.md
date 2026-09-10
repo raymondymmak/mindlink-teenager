@@ -9,20 +9,15 @@ This Expo app is hosted on [EAS Hosting](https://docs.expo.dev/eas/hosting/deplo
 Export the web bundle, then deploy to the stable `staging` alias (not `--prod`):
 
 ```bash
+# Do not inline Gemini keys. Unset any public key so Metro cannot embed it.
+unset EXPO_PUBLIC_GEMINI_API_KEY
 npx expo export -p web
 eas deploy --alias staging --environment preview --non-interactive
 ```
 
 If `eas` is not on `PATH`, use `npx eas-cli` in place of `eas`.
 
-If `EXPO_PUBLIC_GEMINI_API_KEY` must be inlined at export time (do not commit `.env`, do not print secrets):
-
-```bash
-EXPO_PUBLIC_GEMINI_API_KEY="$GEMINI_KEY" \
-EXPO_PUBLIC_GEMINI_MODEL="${EXPO_PUBLIC_GEMINI_MODEL:-auto}" \
-  npx expo export -p web
-eas deploy --alias staging --environment preview --non-interactive
-```
+Server secrets (`GEMINI_KEY`, `PINECONE_KEY`) must already exist on the EAS **preview** environment as **sensitive** variables. Do not copy them into `EXPO_PUBLIC_*` for export. `EXPO_PUBLIC_GEMINI_MODEL=auto` is not a secret and may be present.
 
 **Report both URLs in the PR. Never assume production was updated.**
 
@@ -39,6 +34,7 @@ eas deploy --alias staging --environment preview --non-interactive
 - Command:
 
 ```bash
+unset EXPO_PUBLIC_GEMINI_API_KEY
 npx expo export -p web
 eas deploy --prod --non-interactive
 ```

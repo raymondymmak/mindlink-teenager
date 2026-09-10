@@ -3,6 +3,10 @@
  * Keys stay in process.env (PINECONE_KEY / GEMINI_KEY aliases) — not EXPO_PUBLIC_*.
  */
 
+import { getServerGeminiKey, getServerPineconeKey } from "./secrets.js";
+
+export { getServerGeminiKey, getServerPineconeKey };
+
 export const PINECONE_INDEX = "mindlink-knowledge-base";
 export const EMBEDDING_MODEL = "gemini-embedding-001";
 export const EMBEDDING_DIMENSIONS = 768;
@@ -14,22 +18,6 @@ let cachedIndexHost = "";
 
 export function resetPineconeHostCache() {
   cachedIndexHost = "";
-}
-
-export function getServerGeminiKey() {
-  return (
-    process.env.GEMINI_KEY ||
-    process.env.GEMINI_API_KEY ||
-    ""
-  ).trim();
-}
-
-export function getServerPineconeKey() {
-  return (
-    process.env.PINECONE_KEY ||
-    process.env.PINECONE_API_KEY ||
-    ""
-  ).trim();
 }
 
 export function getPineconeIndexName() {

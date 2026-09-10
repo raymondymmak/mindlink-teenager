@@ -25,7 +25,7 @@ import { Asset } from "expo-asset";
 import {
   generateGeminiText,
   getGeminiModel,
-  isGeminiConfigured,
+  checkGeminiConfigured,
 } from "../utils/geminiClient";
 import { requestBriefGeneration, saveCheckIn } from "../utils/localData";
 import { colors, fonts, radius } from "../utils/theme";
@@ -343,7 +343,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
         },
       });
 
-      if (!isGeminiConfigured()) {
+      if (!(await checkGeminiConfigured())) {
         setMessages((prev) => [
           ...prev,
           {
@@ -351,7 +351,7 @@ So, what do you want to talk about today? You can share anything on your mind, o
             role: "model",
             parts: [
               {
-                text: "Gemini is not configured, so live chat is unavailable. Use Finish early to continue to the journal, or add EXPO_PUBLIC_GEMINI_API_KEY and restart Expo.",
+                text: "Gemini is not configured on the server, so live chat is unavailable. Use Finish early to continue to the journal, or set server-only GEMINI_KEY.",
               },
             ],
           },

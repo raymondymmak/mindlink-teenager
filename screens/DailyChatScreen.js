@@ -20,7 +20,7 @@ import {
   buildContextQueryFromMessages,
   withClinicalContext,
 } from "../utils/contextApi";
-import { generateGeminiText, isGeminiConfigured } from "../utils/geminiClient";
+import { generateGeminiText, checkGeminiConfigured } from "../utils/geminiClient";
 import {
   loadDailyChatMessages,
   readStoredText,
@@ -185,10 +185,10 @@ const DailyChatScreen = ({ navigation }) => {
         },
       ];
 
-      if (!isGeminiConfigured()) {
+      if (!(await checkGeminiConfigured())) {
         const botMessage = {
           _id: createUniqueId("bot"),
-          text: "Gemini is not configured on this device, so I can't continue the live chat. You can still write a diary entry and open Clinician view from the top of the screen.",
+          text: "Gemini is not configured on the server, so I can't continue the live chat. You can still write a diary entry and open Clinician view from the top of the screen.",
           createdAt: new Date(),
           user: {
             _id: 2,
