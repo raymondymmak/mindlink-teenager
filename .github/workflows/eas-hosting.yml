@@ -52,6 +52,7 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        # .npmrc sets legacy-peer-deps=true (react-helmet-async vs React 19).
 
       - name: Export web (Gemini stays server-only)
         run: |
