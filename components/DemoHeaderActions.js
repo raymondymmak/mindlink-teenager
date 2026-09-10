@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppMode } from "./AppModeContext";
 import { APP_MODES, modeToggleLabel } from "../utils/appMode";
+import { colors, fonts, radius } from "../utils/theme";
 
 export default function DemoHeaderActions({ navigation }) {
   const { mode, setMode } = useAppMode();
@@ -61,26 +62,26 @@ const styles = StyleSheet.create({
   },
   modeButton: {
     paddingVertical: 5,
-    paddingHorizontal: 8,
-    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#007bff",
-    borderRadius: 5,
+    borderColor: colors.border,
+    borderRadius: radius,
   },
   modeButtonText: {
-    color: "#007bff",
+    color: colors.text,
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: fonts.metaMedium,
   },
   resetButton: {
     paddingVertical: 5,
-    paddingHorizontal: 8,
-    backgroundColor: "#d32f2f",
-    borderRadius: 5,
+    paddingHorizontal: 10,
+    backgroundColor: colors.danger,
+    borderRadius: radius,
   },
   resetButtonText: {
-    color: "#fff",
+    color: colors.surface,
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: fonts.metaSemi,
   },
 });

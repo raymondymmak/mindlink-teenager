@@ -1,12 +1,10 @@
 # MindLink design system
 
-Static spec for a future visual pass. **Do not restyle the Expo / React Native screens until a human approves the HTML samples.** Behavior stays as it is today.
+Approved visual spec for the Expo restyle (issue [#22](https://github.com/raymondymmak/mindlink-teenager/issues/22)). Behavior is unchanged: Teen/Clinician, 11-section Brief, tags, mood 1–10, Finish early, Reset, RAG.
 
-- Issue: [#22](https://github.com/raymondymmak/mindlink-teenager/issues/22)
-- Visual north star: [EECS Atlas](https://eecs-atlas.sethw.dev/) — clean, paper, destination-first. Not a “wellness app” template.
+- Visual north star: [EECS Atlas](https://eecs-atlas.sethw.dev/) — clean, paper, destination-first.
 - Samples: [`design-samples/`](./design-samples/) (`_base.css`, `teen-diary.html`, `clinician-brief.html`, `chat.html`)
-
-Open the HTML files in a browser (no build). They are not wired into Expo.
+- Implementation: `utils/theme.js` + `components/useAppFonts.js`. Screens import tokens; do not restyle by inventing new colors.
 
 ---
 
@@ -131,18 +129,20 @@ Sizes: 11px kicker (uppercase, muted, Plex Sans), 13px chrome, 14–15px body (G
 
 ---
 
-## Implementation notes (future Cursor agents)
+## Implementation notes
 
-When a human says the samples are approved:
+The samples are **approved**. Expo screens now use `utils/theme.js`.
 
-1. Read this file and `design-samples/_base.css`. Screenshot the three HTML pages. Match them; do not “improve” the palette.
+When changing visuals later:
+
+1. Read this file and `design-samples/_base.css`. Match them; do not “improve” the palette.
 2. Touch presentation only: `screens/*`, `components/DemoHeaderActions.js`, `App.js` tab/header options. **Do not** change `utils/localData.js`, `utils/sessionBriefLogic.js` harness keys, `utils/sessionBriefEngine.js`, `app/api/context+api.js`, Gemini routing, or storage keys.
-3. Replace `#007bff` / `#2e4057` / `#f5f8fa` with the tokens above. Radius 8. Header actions stay in `DemoHeaderActions` (toggle then Reset). Load Space Grotesk + IBM Plex Sans (`expo-font` / `@expo-google-fonts/*`). Do not set the UI to IBM Plex Mono.
+3. Keep `#FAFAF9` / `#1D4ED8` / radius 8. Header actions stay in `DemoHeaderActions` (toggle then Reset). Fonts load via `useAppFonts` (`@expo-google-fonts/space-grotesk`, `ibm-plex-sans`, `ibm-plex-mono` for IDs only).
 4. Intro `InitChatScreen` keeps **Finish early** in `headerRight`. MainApp screens keep toggle + Reset.
 5. Clinician `REPORT_SECTIONS` order and empty string stay. Wide split already exists in `ClinicianHomeScreen` (`width >= 960`).
-6. Web: keep `usePinWebPathToRoot` and the Expo Router shell. Do not add CSS imports that break native.
+6. Web: keep `usePinWebPathToRoot` and the Expo Router shell. Do not add a second `NavigationContainer`.
 7. Verify: save diary with tags + mood 3/10 → My week glance → Show clinician view → 11 sections + panels → Show teen view → Finish early on intro still goes Summary → Home → Reset Demo clears and returns to Welcome. Chat/Brief still call `POST /api/context` when configured.
-8. Do not print `GEMINI_KEY` / `PINECONE_KEY`. Do not restyle as part of an unrelated PR.
+8. Do not print `GEMINI_KEY` / `PINECONE_KEY`.
 
 React Native mapping sketch (later):
 
@@ -168,11 +168,9 @@ export const tokens = {
 
 ## Out of scope
 
-- Restyling Expo / React Native in the same change as this spec (this repo change is docs + static HTML only)
 - New features, new Brief sections, new tags, new mood scale
-- Dark mode, i18n pass, design-package dependency
+- Dark mode, i18n pass
 - Using IBM Plex Mono for captions, tabs, or section labels
-- Production deploy (docs-only; do not `eas deploy`)
 - Changing RAG, Gemini models, or env handling (see `AGENTS.md` for Metro `.env`)
 - Copying Atlas course-planner IA into MindLink
 
@@ -186,4 +184,4 @@ export const tokens = {
 | [`design-samples/chat.html`](./design-samples/chat.html) | Transcript, composer, **Finish early** as text, same demo actions |
 | [`design-samples/clinician-brief.html`](./design-samples/clinician-brief.html) | 11-section harness, source panels, **Show teen view** + Reset |
 
-Visual implementation is **pending user approval of these samples**.
+Visual implementation is in the Expo app (`utils/theme.js`). Samples remain the reference.

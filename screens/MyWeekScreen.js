@@ -12,6 +12,7 @@ import {
   buildTeenWeekCard,
 } from "../utils/sessionBriefLogic";
 import { loadSessionBriefInputs } from "../utils/sessionBriefEngine";
+import { colors, fonts, radius } from "../utils/theme";
 
 export default function MyWeekScreen() {
   const [card, setCard] = useState(null);
@@ -40,7 +41,7 @@ export default function MyWeekScreen() {
   if (isLoading && !card) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#007bff" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Loading your week…</Text>
       </View>
     );
@@ -113,7 +114,7 @@ export default function MyWeekScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f8fa",
+    backgroundColor: colors.bg,
   },
   content: {
     padding: 20,
@@ -123,49 +124,53 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f5f8fa",
+    backgroundColor: colors.bg,
   },
   loadingText: {
     marginTop: 12,
-    color: "#666",
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
   hello: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#2e4057",
+    fontSize: 22,
+    fontFamily: fonts.title,
+    color: colors.text,
+    letterSpacing: -0.4,
     marginBottom: 6,
   },
   lede: {
-    fontSize: 15,
-    color: "#555",
+    fontSize: 14,
+    fontFamily: fonts.meta,
+    color: colors.muted,
     lineHeight: 22,
     marginBottom: 18,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#e4ebf1",
+    borderColor: colors.border,
   },
   cardTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#007bff",
+    fontSize: 11,
+    fontFamily: fonts.metaSemi,
+    color: colors.muted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
     marginBottom: 8,
   },
   moodHeadline: {
     fontSize: 22,
-    fontWeight: "700",
-    color: "#2e4057",
+    fontFamily: fonts.title,
+    color: colors.text,
     marginBottom: 4,
   },
   moodDetail: {
     fontSize: 15,
-    color: "#555",
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 22,
   },
   chipRow: {
@@ -175,43 +180,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   moodChip: {
-    backgroundColor: "#e8f4f8",
-    borderRadius: 16,
-    paddingVertical: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingVertical: 4,
     paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   moodChipText: {
-    color: "#2e4057",
-    fontWeight: "700",
-    fontSize: 14,
+    color: colors.text,
+    fontFamily: fonts.metaMedium,
+    fontSize: 13,
   },
   tagChip: {
-    backgroundColor: "#eef6ff",
-    borderRadius: 16,
-    paddingVertical: 6,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    paddingVertical: 4,
     paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   tagChipText: {
-    color: "#007bff",
-    fontWeight: "600",
-    fontSize: 14,
+    color: colors.accent,
+    fontFamily: fonts.metaMedium,
+    fontSize: 13,
   },
   empty: {
-    fontSize: 15,
-    color: "#666",
+    fontSize: 14,
+    fontFamily: fonts.meta,
+    color: colors.muted,
     lineHeight: 22,
   },
   readyCard: {
-    borderColor: "#b7e0c2",
-    backgroundColor: "#f3fbf5",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   notReadyCard: {
-    borderColor: "#f0d9a6",
-    backgroundColor: "#fff9ef",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   readyBody: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 22,
   },
 });

@@ -15,11 +15,8 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { TabView, TabBar } from "react-native-tab-view";
 import Slider from "@react-native-community/slider";
-import {
-  getDiaryEntries,
-  requestBriefGeneration,
-  saveDiaryEntry,
-} from "../utils/localData";
+import { getDiaryEntries, requestBriefGeneration, saveDiaryEntry } from "../utils/localData";
+import { colors, fonts, radius } from "../utils/theme";
 
 const AVAILABLE_TAGS = [
   "school",
@@ -117,8 +114,8 @@ function DiaryWriteTab({ userName, date, prompt, onSave }) {
           step={1}
           value={localMoodValue}
           onValueChange={setLocalMoodValue}
-          minimumTrackTintColor="#007bff"
-          maximumTrackTintColor="#d3d3d3"
+          minimumTrackTintColor={colors.accent}
+          maximumTrackTintColor={colors.border}
         />
       </View>
 
@@ -303,15 +300,15 @@ const HomeScreen = ({ navigation }) => {
           {selectedEntry.type === "json" ? (
             <View>
               <Text style={styles.entryText}>
-                <Text style={{ fontWeight: "bold" }}>Date:</Text>{" "}
+                <Text style={{ fontFamily: fonts.metaSemi, color: colors.text }}>Date:</Text>{" "}
                 {selectedEntry.date}
               </Text>
               <Text style={styles.entryText}>
-                <Text style={{ fontWeight: "bold" }}>Mood:</Text>{" "}
+                <Text style={{ fontFamily: fonts.metaSemi, color: colors.text }}>Mood:</Text>{" "}
                 {selectedEntry.mood}/10
               </Text>
               <Text style={styles.entryText}>
-                <Text style={{ fontWeight: "bold" }}>Tags:</Text>{" "}
+                <Text style={{ fontFamily: fonts.metaSemi, color: colors.text }}>Tags:</Text>{" "}
                 {selectedEntry.tags && selectedEntry.tags.length > 0
                   ? selectedEntry.tags.map((tag) => `#${tag}`).join(", ")
                   : "None"}
@@ -329,7 +326,7 @@ const HomeScreen = ({ navigation }) => {
         <>
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#007bff" />
+              <ActivityIndicator size="large" color={colors.accent} />
               <Text style={styles.loadingText}>Loading diary entries...</Text>
             </View>
           ) : (
@@ -399,13 +396,13 @@ const HomeScreen = ({ navigation }) => {
               {...props}
               indicatorStyle={styles.tabIndicator}
               style={styles.tabBar}
-              activeColor="#000000"
-              inactiveColor="#333333"
+              activeColor={colors.text}
+              inactiveColor={colors.muted}
               renderLabel={({ route, focused }) => (
                 <Text
                   style={[
                     styles.tabLabel,
-                    { color: focused ? "#000000" : "#333333" },
+                    { color: focused ? colors.text : colors.muted },
                   ]}
                 >
                   {route.title}
@@ -422,7 +419,7 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f8fa",
+    backgroundColor: colors.bg,
   },
   keyboardAvoid: {
     flex: 1,
@@ -435,82 +432,86 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#2e4057",
+    fontSize: 22,
+    fontFamily: fonts.title,
+    color: colors.text,
+    letterSpacing: -0.4,
     marginBottom: 4,
   },
   date: {
-    fontSize: 16,
-    color: "#666",
+    fontSize: 14,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
   promptContainer: {
-    backgroundColor: "#e8f4f8",
-    borderRadius: 12,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius,
     padding: 16,
     marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#007bff",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   promptText: {
-    fontSize: 18,
-    color: "#2e4057",
+    fontSize: 16,
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 24,
   },
   diaryContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     padding: 6,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
     minHeight: 250,
   },
   diaryInput: {
     fontSize: 16,
-    color: "#333",
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 24,
     padding: 10,
     minHeight: 230,
   },
   saveButton: {
-    backgroundColor: "#007bff",
-    borderRadius: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radius,
     paddingVertical: 12,
     alignItems: "center",
     marginBottom: 16,
   },
   saveButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+    color: colors.surface,
+    fontSize: 15,
+    fontFamily: fonts.bodyMedium,
   },
   moodContainer: {
     marginBottom: 20,
     padding: 15,
-    backgroundColor: "#fff",
-    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
   },
   moodLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2e4057",
+    fontSize: 13,
+    fontFamily: fonts.metaSemi,
+    color: colors.text,
     marginBottom: 10,
   },
   tagsContainer: {
     marginBottom: 20,
     padding: 15,
-    backgroundColor: "#fff",
-    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
   },
   tagsLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2e4057",
+    fontSize: 13,
+    fontFamily: fonts.metaSemi,
+    color: colors.text,
     marginBottom: 10,
   },
   tagsWrapper: {
@@ -518,50 +519,55 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   tag: {
-    backgroundColor: "#e8f4f8",
-    borderRadius: 15,
-    paddingVertical: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     margin: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   selectedTag: {
-    backgroundColor: "#007bff",
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
   },
   tagText: {
-    color: "#007bff",
-    fontSize: 14,
+    color: colors.text,
+    fontSize: 13,
+    fontFamily: fonts.meta,
   },
   selectedTagText: {
-    color: "#fff",
+    color: colors.accent,
+    fontFamily: fonts.metaMedium,
   },
-  // Styles for history tab
   historyContainer: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
   },
   entriesListContainer: {
     flex: 1,
     padding: 16,
   },
   diaryItem: {
-    padding: 16,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#007bff",
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 0,
+    marginBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   diaryDate: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 15,
+    fontFamily: fonts.bodyMedium,
+    color: colors.text,
   },
   diarySize: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 13,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
   entryDetailContainer: {
     flex: 1,
@@ -569,24 +575,27 @@ const styles = StyleSheet.create({
   },
   entryText: {
     fontSize: 16,
-    color: "#333",
+    fontFamily: fonts.body,
+    color: colors.text,
     lineHeight: 24,
     textAlign: "left",
     padding: 10,
   },
   tabBar: {
-    backgroundColor: "#f0f0f0",
+    backgroundColor: colors.bg,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: colors.border,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   tabIndicator: {
-    backgroundColor: "#007bff",
-    height: 3,
+    backgroundColor: colors.text,
+    height: 2,
   },
   tabLabel: {
-    color: "#000000",
-    fontWeight: "700",
-    fontSize: 16,
+    color: colors.text,
+    fontFamily: fonts.metaMedium,
+    fontSize: 14,
     textTransform: "capitalize",
   },
   noContentContainer: {
@@ -597,8 +606,9 @@ const styles = StyleSheet.create({
     minHeight: 200,
   },
   noContentText: {
-    fontSize: 16,
-    color: "#666",
+    fontSize: 15,
+    fontFamily: fonts.meta,
+    color: colors.muted,
     textAlign: "center",
     lineHeight: 24,
   },
@@ -609,9 +619,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backButtonText: {
-    color: "#007bff",
-    fontSize: 16,
-    fontWeight: "500",
+    color: colors.accent,
+    fontSize: 14,
+    fontFamily: fonts.metaMedium,
   },
   loadingContainer: {
     flex: 1,
@@ -621,8 +631,9 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 16,
-    color: "#666",
+    fontSize: 14,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
 });
 

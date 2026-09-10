@@ -31,6 +31,7 @@ import {
   saveCheckIn,
   saveDailyChatMessages,
 } from "../utils/localData";
+import { colors, fonts, radius } from "../utils/theme";
 
 const DailyChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
@@ -316,7 +317,7 @@ const DailyChatScreen = ({ navigation }) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         // Handle bold text
         return (
-          <Text key={`bold-${boldIndex}`} style={{ fontWeight: "bold" }}>
+          <Text key={`bold-${boldIndex}`} style={{ fontFamily: fonts.bodyMedium }}>
             {part.slice(2, -2)}
           </Text>
         );
@@ -340,7 +341,7 @@ const DailyChatScreen = ({ navigation }) => {
               return (
                 <Text
                   key={`phone-${boldIndex}-${phoneIndex}`}
-                  style={{ color: "#007bff", textDecorationLine: "underline" }}
+                  style={{ color: colors.accent, textDecorationLine: "underline" }}
                   onPress={() =>
                     Linking.openURL(`tel:${subPart.replace(/\s/g, "")}`)
                   }
@@ -401,19 +402,21 @@ const DailyChatScreen = ({ navigation }) => {
         >
           <View
             style={{
-              backgroundColor: "#fff",
-              borderRadius: 16,
+              backgroundColor: colors.surface,
+              borderRadius: radius,
               padding: 24,
               width: "85%",
               alignItems: "center",
+              borderWidth: 1,
+              borderColor: colors.border,
             }}
           >
             <Text
               style={{
                 fontSize: 20,
-                fontWeight: "bold",
+                fontFamily: fonts.title,
                 marginBottom: 12,
-                color: "#d32f2f",
+                color: colors.danger,
                 textAlign: "center",
               }}
             >
@@ -433,13 +436,13 @@ const DailyChatScreen = ({ navigation }) => {
             >
               <Text
                 style={{
-                  color: "#1976d2",
+                  color: colors.accent,
                   fontSize: 16,
                   textDecorationLine: "underline",
                 }}
               >
                 Suicide Prevention Hotline:{" "}
-                <Text style={{ fontWeight: "bold" }}>2896 0000</Text>
+                <Text style={{ fontFamily: fonts.bodyMedium }}>2896 0000</Text>
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -450,13 +453,13 @@ const DailyChatScreen = ({ navigation }) => {
             >
               <Text
                 style={{
-                  color: "#1976d2",
+                  color: colors.accent,
                   fontSize: 16,
                   textDecorationLine: "underline",
                 }}
               >
                 Samaritans 24hr Hotline:{" "}
-                <Text style={{ fontWeight: "bold" }}>2382 0000</Text>
+                <Text style={{ fontFamily: fonts.bodyMedium }}>2382 0000</Text>
               </Text>
             </TouchableOpacity>
             <Text
@@ -473,7 +476,7 @@ const DailyChatScreen = ({ navigation }) => {
             <Button
               title="I Understand"
               onPress={hideCrisisModal}
-              buttonStyle={{ backgroundColor: "#007bff", borderRadius: 8 }}
+              buttonStyle={{ backgroundColor: colors.accent, borderRadius: radius }}
             />
           </View>
         </View>
@@ -618,14 +621,13 @@ const DailyChatScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  // Web-specific styles
   absoluteContainer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.bg,
     height: "100%",
     width: "100%",
     overflow: "hidden",
@@ -644,15 +646,13 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 64, // Leave space for input container
-    backgroundColor: "#f5f5f5",
+    bottom: 64,
+    backgroundColor: colors.bg,
     overflow: "hidden",
   },
-
-  // Mobile-specific styles
   safeAreaContainer: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: colors.bg,
   },
   keyboardAvoidView: {
     flex: 1,
@@ -664,9 +664,9 @@ const styles = StyleSheet.create({
   mobileInputContainer: {
     flexDirection: "row",
     padding: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
+    borderTopColor: colors.border,
   },
   flatListStyle: {
     flex: 1,
@@ -675,33 +675,37 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 20, // Extra padding at bottom to see last message
+    paddingBottom: 20,
   },
   messageContainer: {
     maxWidth: "80%",
-    padding: 12,
-    borderRadius: 12,
+    padding: 10,
+    borderRadius: radius,
     marginBottom: 8,
   },
   userMessageContainer: {
     alignSelf: "flex-end",
-    backgroundColor: "#007bff",
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   botMessageContainer: {
     alignSelf: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
   },
   userMessageText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
     textAlign: "left",
-    color: "#fff",
+    color: colors.surface,
   },
   botMessageText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
     textAlign: "left",
-    color: "#000",
+    color: colors.text,
   },
   inputContainer: {
     position: "absolute",
@@ -710,31 +714,33 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     padding: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
-    height: 64, // Fixed height for input container
+    borderTopColor: colors.border,
+    height: 64,
   },
   input: {
     flex: 1,
     padding: 12,
-    backgroundColor: "#fff",
-    borderRadius: 25,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
     marginRight: 8,
+    fontFamily: fonts.body,
+    color: colors.text,
   },
   sendButton: {
-    backgroundColor: "#007bff",
-    borderRadius: 25,
+    backgroundColor: colors.accent,
+    borderRadius: radius,
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: "center",
     alignItems: "center",
   },
   sendButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: colors.surface,
+    fontFamily: fonts.bodyMedium,
   },
   briefLink: {
     alignSelf: "center",
@@ -746,9 +752,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   briefLinkText: {
-    color: "#007bff",
-    fontWeight: "600",
-    fontSize: 14,
+    color: colors.accent,
+    fontFamily: fonts.metaMedium,
+    fontSize: 13,
   },
 });
 

@@ -8,13 +8,23 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Platform, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { HelmetProvider } from "react-helmet-async";
+import { useAppFonts } from "./components/useAppFonts";
+import {
+  colors,
+  headerScreenOptions,
+  tabBarScreenOptions,
+} from "./utils/theme";
 
 // Apply global style to prevent zoom on iOS. Guard document so Expo Router
 // server rendering (web.output: "server") does not crash in Node.
 if (Platform.OS === "web" && typeof document !== "undefined") {
   const style = document.createElement("style");
   style.textContent = `
-    input, textarea, select, button {
+    html, body, #root {
+      background: ${colors.bg};
+      color: ${colors.text};
+    }
+    input, textarea, select {
       font-size: 16px !important;
     }
   `;
@@ -98,6 +108,7 @@ function MainAppTabs({ navigation }) {
       <Tab.Navigator
         key="clinician"
         screenOptions={{
+          ...headerScreenOptions,
           headerShown: true,
           headerRight,
           tabBarStyle: { display: "none", height: 0 },
@@ -123,8 +134,8 @@ function MainAppTabs({ navigation }) {
             color={color}
           />
         ),
-        tabBarActiveTintColor: "#007bff",
-        tabBarInactiveTintColor: "gray",
+        ...headerScreenOptions,
+        ...tabBarScreenOptions,
         headerShown: true,
         headerRight,
       })}
@@ -146,12 +157,14 @@ export default function App() {
   // Keep the address bar on `/` so nested screen names do not remount this
   // shell via Expo Router (that left clinician view stuck on its spinner).
   usePinWebPathToRoot();
+  useAppFonts();
   return (
     <HelmetProvider>
       <AppModeProvider>
         <Stack.Navigator
           initialRouteName="Welcome"
           screenOptions={{
+            ...headerScreenOptions,
             headerShown: false,
           }}
         >
@@ -159,7 +172,7 @@ export default function App() {
           <Stack.Screen
             name="Chat"
             component={InitChatScreen}
-            options={{ headerShown: true }}
+            options={{ headerShown: true, title: "Chat" }}
           />
           <Stack.Screen
             name="Summary"
