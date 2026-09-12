@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { checkGeminiConfigured, useGeminiConfigured } from '../utils/geminiClient';
 import { Helmet } from 'react-helmet-async';
 import { colors, fonts, radius } from '../utils/theme';
+import { releaseWebKeyboardViewport } from '../utils/webViewport';
 
 const WelcomeScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -53,6 +54,10 @@ const WelcomeScreen = ({ navigation }) => {
 
   const handleNavigate = async () => {
     try {
+      Keyboard.dismiss();
+      if (Platform.OS === 'web') {
+        await releaseWebKeyboardViewport();
+      }
       await AsyncStorage.setItem('@user_name', name);
       const initialChatCompleted = await AsyncStorage.getItem('@initial_chat_completed');
       
@@ -113,6 +118,9 @@ const WelcomeScreen = ({ navigation }) => {
               />
               <TouchableOpacity
                 onPress={handleNavigate}
+                onPressIn={() => {
+                  Keyboard.dismiss();
+                }}
                 style={[styles.button, name.trim() === '' && styles.buttonDisabled]}
                 disabled={name.trim() === ''}
               >

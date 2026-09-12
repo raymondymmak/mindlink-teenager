@@ -18,7 +18,8 @@
     "test:gemini-generate": "node scripts/test-gemini-generate.mjs",
     "test:gemini-api": "node scripts/test-gemini-api.mjs",
     "test:context-api": "node scripts/test-context-api.mjs",
-    "test:retrieve-context": "node scripts/test-retrieve-context.mjs"
+    "test:retrieve-context": "node scripts/test-retrieve-context.mjs",
+    "test:web-viewport": "node scripts/test-web-viewport.js"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
