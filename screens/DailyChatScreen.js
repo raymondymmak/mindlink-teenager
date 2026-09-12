@@ -29,6 +29,7 @@ import {
   saveDailyChatMessages,
 } from "../utils/localData";
 import { colors, fonts, radius } from "../utils/theme";
+import { useReleaseWebKeyboardViewportOnFocus } from "../components/WebViewportReset";
 
 const DailyChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
@@ -39,6 +40,7 @@ const DailyChatScreen = ({ navigation }) => {
   const [userName, setUserName] = useState("");
   const [crisisModalVisible, setCrisisModalVisible] = useState(false);
   const [crisisModalShown, setCrisisModalShown] = useState(false);
+  useReleaseWebKeyboardViewportOnFocus();
 
   // Crisis keywords that trigger the modal
   const crisisKeywords = [
@@ -573,31 +575,20 @@ const DailyChatScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   absoluteContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: colors.bg,
-    height: "100%",
     width: "100%",
+    height: "100%",
     overflow: "hidden",
   },
   fixedHeightContainer: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
+    flex: 1,
     flexDirection: "column",
+    width: "100%",
     height: "100%",
   },
   chatContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 64,
+    flex: 1,
     backgroundColor: colors.bg,
     overflow: "hidden",
   },
@@ -659,16 +650,12 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   inputContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: "row",
     padding: 8,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    height: 64,
+    minHeight: 64,
   },
   input: {
     flex: 1,

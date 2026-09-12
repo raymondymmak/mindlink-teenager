@@ -23,6 +23,11 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
     html, body, #root {
       background: ${colors.bg};
       color: ${colors.text};
+      height: 100%;
+    }
+    #root {
+      display: flex;
+      flex-direction: column;
     }
     input, textarea, select {
       font-size: 16px !important;
@@ -55,6 +60,7 @@ import MyWeekScreen from "./screens/MyWeekScreen";
 import ClinicianBriefScreen from "./screens/ClinicianHomeScreen";
 import DemoHeaderActions from "./components/DemoHeaderActions";
 import { AppModeProvider, useAppMode } from "./components/AppModeContext";
+import { WebViewportReset } from "./components/WebViewportReset";
 import { APP_MODES } from "./utils/appMode";
 
 const Stack = createStackNavigator();
@@ -168,6 +174,7 @@ export default function App() {
   useAppFonts();
   return (
     <HelmetProvider>
+      <WebViewportReset />
       <AppModeProvider>
         <Stack.Navigator
           initialRouteName="Welcome"
