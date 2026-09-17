@@ -330,6 +330,31 @@ export async function listBriefSnapshots() {
   return snapshots;
 }
 
+export async function clearOnDeviceRecords() {
+  const prefixes = [
+    "diary-",
+    "checkin-",
+    "userReport-",
+    "sessionBrief-",
+    "briefSnapshot-",
+  ];
+  const storage = webStorage();
+  if (storage) {
+    Object.keys(storage)
+      .filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
+      .forEach((key) => storage.removeItem(key));
+    return;
+  }
+  const directory = FileSystem.documentDirectory;
+  if (!directory) return;
+  const files = await FileSystem.readDirectoryAsync(directory);
+  for (const file of files) {
+    if (prefixes.some((prefix) => file.startsWith(prefix))) {
+      await FileSystem.deleteAsync(`${directory}${file}`, { idempotent: true });
+    }
+  }
+}
+
 export async function requestBriefGeneration() {
   await AsyncStorage.setItem(STORAGE_KEYS.pendingBrief, "1");
 }

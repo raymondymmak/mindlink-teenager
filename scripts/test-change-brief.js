@@ -217,6 +217,57 @@ function testParseAndStripHam() {
   assert.ok(themesByPolarity(parsed.themes, "improved").length >= 1);
 }
 
+function testGeminiCannotInventSi() {
+  const local = buildLocalChangeBrief({
+    inputs: baselineInputs(),
+  });
+  assert.strictEqual(local.safetySummary.siOrSelfHarm, false);
+  assert.notStrictEqual(local.safetySummary.concern, "elevated");
+  const merged = mergeChangeBrief(
+    {
+      kind: "baseline",
+      windowLabel: WINDOW_LABELS.firstVisit,
+      safetySummary: {
+        concern: "elevated",
+        siOrSelfHarm: true,
+        items: [{ kind: "si", text: "Suicidal ideation language in chat" }],
+      },
+      sessionFocus: ["Check safety."],
+    },
+    local
+  );
+  assert.strictEqual(merged.safetySummary.siOrSelfHarm, false);
+  assert.notStrictEqual(merged.safetySummary.concern, "elevated");
+}
+
+function testChatReportTemplateDoesNotFlagSafety() {
+  const brief = buildLocalChangeBrief({
+    inputs: {
+      userName: "Alex",
+      entries: [
+        {
+          date: "2026-09-04",
+          file: "diary-ok.json",
+          mood: 5,
+          tags: ["school"],
+          response: "I am worried about the exam and I can't focus.",
+        },
+      ],
+      checkIns: [],
+      summaries: [
+        {
+          date: "2026-09-04",
+          file: "userReport-2026-09-04.txt",
+          content:
+            "8. Risk Assessment\nSuicidal Ideation/Self-Harm: no thoughts were disclosed. Not disclosed in conversation.",
+        },
+      ],
+    },
+  });
+  assert.strictEqual(brief.safetySummary.siOrSelfHarm, false);
+  assert.notStrictEqual(brief.safetySummary.concern, "elevated");
+}
+
 function testLocalSafetyWinsOverGemini() {
   const local = buildLocalChangeBrief({
     inputs: {
@@ -338,6 +389,8 @@ function main() {
   testEmptyWindowCarriesSafety();
   testSafetyScanElevated();
   testParseAndStripHam();
+  testGeminiCannotInventSi();
+  testChatReportTemplateDoesNotFlagSafety();
   testLocalSafetyWinsOverGemini();
   testMarkdownAndPromptCopy();
   testSnapshotNormalize();

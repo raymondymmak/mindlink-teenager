@@ -338,6 +338,7 @@ function collectEvidenceItems({ entries = [], checkIns = [], summaries = [] } = 
     items.push({
       text,
       sourceType: "diary",
+      origin: "diary",
       sourceId: sourceIdOf(entry) || `diary-${entry.date || "undated"}`,
       createdAt: entry.createdAt || entry.date || null,
       date: entry.date || null,
@@ -351,6 +352,7 @@ function collectEvidenceItems({ entries = [], checkIns = [], summaries = [] } = 
       items.push({
         text: asText(msg.text),
         sourceType: "chat",
+        origin: "check-in",
         sourceId: sourceIdOf(checkIn) || `checkin-${checkIn.date || "undated"}-${index}`,
         createdAt: checkIn.createdAt || checkIn.date || null,
         date: checkIn.date || null,
@@ -364,6 +366,7 @@ function collectEvidenceItems({ entries = [], checkIns = [], summaries = [] } = 
     items.push({
       text: asText(summary.content),
       sourceType: "chat",
+      origin: "chat-report",
       sourceId: sourceIdOf(summary) || `report-${summary.date || "undated"}`,
       createdAt: summary.date || null,
       date: summary.date || null,
@@ -375,8 +378,11 @@ function collectEvidenceItems({ entries = [], checkIns = [], summaries = [] } = 
 }
 
 function scanSafety(items = [], priorSnapshot = null) {
+  const teenItems = (items || []).filter(
+    (item) => item.origin !== "chat-report" && item.sourceType !== "chat-report"
+  );
   const hits = [];
-  (items || []).forEach((item) => {
+  teenItems.forEach((item) => {
     SAFETY_RULES.forEach((rule) => {
       if (rule.re.test(item.text || "")) {
         hits.push({
@@ -896,31 +902,47 @@ function mergeChangeBrief(parsed, local) {
           const localTheme = localByLabel.get(theme.label.toLowerCase());
           return {
             ...theme,
-            evidence: mergeEvidence(theme.evidence, localTheme?.evidence),
+            evidence: mergeEvidence(
+              theme.evidence,
+              localTheme && localTheme.polarity === theme.polarity
+                ? localTheme.evidence
+                : []
+            ),
           };
         })
       : base.themes;
 
   const safety = normalizeSafetySummary(parsed.safety || parsed.safetySummary);
   const localSafety = base.safetySummary || emptySafetySummary();
+  const geminiExtraItems = (safety.items || []).filter((item) => {
+    if (item.kind === "si" || item.kind === "self-harm") {
+      return localSafety.siOrSelfHarm;
+    }
+    return true;
+  });
   const mergedSafety = {
-    concern: escalateConcern(safety.concern, localSafety.concern),
-    siOrSelfHarm: safety.siOrSelfHarm || localSafety.siOrSelfHarm,
-    otherRisk: safety.otherRisk || localSafety.otherRisk,
-    items:
-      [...safety.items, ...localSafety.items]
-        .filter(
-          (item, index, arr) =>
-            arr.findIndex((other) => other.text === item.text) === index
-        )
-        .slice(0, 6),
+    concern: localSafety.concern,
+    siOrSelfHarm: localSafety.siOrSelfHarm,
+    otherRisk: localSafety.otherRisk || safety.otherRisk,
+    items: [...localSafety.items, ...geminiExtraItems]
+      .filter(
+        (item, index, arr) =>
+          arr.findIndex((other) => other.text === item.text) === index
+      )
+      .slice(0, 6),
     stillOpen: uniqueStrings([
-      ...safety.stillOpen,
       ...localSafety.stillOpen,
+      ...(localSafety.siOrSelfHarm ? safety.stillOpen : []),
     ]).slice(0, 4),
   };
   if (mergedSafety.siOrSelfHarm) {
-    mergedSafety.concern = escalateConcern(mergedSafety.concern, "elevated");
+    mergedSafety.concern = "elevated";
+  } else if (
+    mergedSafety.otherRisk ||
+    mergedSafety.items.length ||
+    mergedSafety.stillOpen.length
+  ) {
+    mergedSafety.concern = escalateConcern(mergedSafety.concern, "monitor");
   }
 
   const presentingConcerns = uniqueStrings(
