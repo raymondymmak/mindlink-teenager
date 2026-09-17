@@ -16,6 +16,11 @@ const WINDOW_LABELS = {
 
 const POLARITIES = ["improved", "worse", "new", "stable"];
 const CONCERNS = ["none", "monitor", "elevated"];
+const SAFETY_CONCERN_LABELS = {
+  none: "No flags this window",
+  monitor: "Follow up in session",
+  elevated: "Safety language — review in the room",
+};
 const SOURCE_TYPES = ["diary", "chat"];
 
 const SAFETY_RULES = [
@@ -203,6 +208,10 @@ function normalizeTheme(raw, fallbackPolarity = "stable") {
 function normalizeConcern(value) {
   const raw = asText(value).toLowerCase();
   return CONCERNS.includes(raw) ? raw : "none";
+}
+
+function formatSafetyConcernLabel(concern) {
+  return SAFETY_CONCERN_LABELS[normalizeConcern(concern)];
 }
 
 function escalateConcern(a, b) {
@@ -1056,7 +1065,7 @@ function formatChangeBriefMarkdown(changeBrief, { analysis, sections } = {}) {
     analysis?.userName ? `Preferred name: ${analysis.userName}` : "",
     "",
     `## Safety`,
-    `Concern: ${safety.concern}`,
+    formatSafetyConcernLabel(safety.concern),
     safety.siOrSelfHarm
       ? "- Suicidal ideation or self-harm language is present in this window."
       : "- No suicidal ideation or self-harm language detected in this window.",
@@ -1199,6 +1208,7 @@ function usesForbiddenUiWord(text) {
 module.exports = {
   WINDOW_LABELS,
   POLARITIES,
+  SAFETY_CONCERN_LABELS,
   collectSourceIds,
   collectEvidenceItems,
   filterInputsSinceSnapshot,
@@ -1215,4 +1225,5 @@ module.exports = {
   buildChangeBriefPrompt,
   emptyChangeBrief,
   usesForbiddenUiWord,
+  formatSafetyConcernLabel,
 };

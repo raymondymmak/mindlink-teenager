@@ -23,6 +23,7 @@ import {
   REPORT_SECTIONS,
 } from "../utils/sessionBriefLogic";
 import {
+  formatSafetyConcernLabel,
   themesByPolarity,
   WINDOW_LABELS,
 } from "../utils/changeBriefLogic";
@@ -183,7 +184,7 @@ function SafetyStrip({ safety }) {
           tone === "elevated" && styles.safetyConcernElevated,
         ]}
       >
-        Concern: {summary.concern}
+        {formatSafetyConcernLabel(summary.concern)}
       </Text>
       <Text style={styles.sectionContent}>
         {summary.siOrSelfHarm

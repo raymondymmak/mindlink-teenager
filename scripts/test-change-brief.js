@@ -9,6 +9,7 @@ const {
   collectSourceIds,
   filterInputsSinceSnapshot,
   formatChangeBriefMarkdown,
+  formatSafetyConcernLabel,
   mergeChangeBrief,
   normalizeSnapshot,
   parseChangeBrief,
@@ -307,6 +308,9 @@ function testMarkdownAndPromptCopy() {
   assert.ok(markdown.includes("## Safety"));
   assert.ok(markdown.includes("## Session focus"));
   assert.ok(markdown.includes(WINDOW_LABELS.firstVisit));
+  assert.ok(markdown.includes(formatSafetyConcernLabel("none")));
+  assert.ok(!markdown.includes("Concern: monitor"));
+  assert.ok(!markdown.includes("Concern: none"));
   assert.ok(!markdown.toLowerCase().includes("delta"));
   assert.ok(!/HAM-D:\s*\d+/i.test(markdown));
 
@@ -338,6 +342,36 @@ function testSnapshotNormalize() {
   assert.strictEqual(snapshot.kind, "baseline");
   assert.strictEqual(snapshot.themes[0].polarity, "new");
   assert.strictEqual(snapshot.safetySummary.concern, "monitor");
+}
+
+function testSafetyConcernLabels() {
+  assert.strictEqual(
+    formatSafetyConcernLabel("none"),
+    "No flags this window"
+  );
+  assert.strictEqual(
+    formatSafetyConcernLabel("monitor"),
+    "Follow up in session"
+  );
+  assert.strictEqual(
+    formatSafetyConcernLabel("elevated"),
+    "Safety language — review in the room"
+  );
+  const markdown = formatChangeBriefMarkdown({
+    kind: "change",
+    windowLabel: WINDOW_LABELS.sinceLastBrief,
+    safetySummary: {
+      concern: "monitor",
+      siOrSelfHarm: false,
+      items: [],
+      stillOpen: ["Sleep still unclear."],
+    },
+    themes: [],
+    sessionFocus: ["Ask about sleep.", "What felt heaviest?", "Anything to not miss?"],
+    unknowns: [],
+  });
+  assert.ok(markdown.includes("Follow up in session"));
+  assert.ok(!markdown.includes("Concern: monitor"));
 }
 
 function testInstructionForbidsScores() {
@@ -394,6 +428,7 @@ function main() {
   testLocalSafetyWinsOverGemini();
   testMarkdownAndPromptCopy();
   testSnapshotNormalize();
+  testSafetyConcernLabels();
   testInstructionForbidsScores();
   testTeenLensUnchanged();
   testStripInventedScales();
