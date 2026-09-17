@@ -6,32 +6,34 @@ import {
   generateGeminiText,
   checkGeminiConfigured,
 } from "./geminiClient";
-import {
-  SYSTEM_INSTRUCTION_SESSION_BRIEF,
-  SYSTEM_INSTRUCTION_SUMMARY,
-} from "./systemInstruction";
+import { SYSTEM_INSTRUCTION_CHANGE_BRIEF } from "./systemInstruction";
 import {
   analyzeLocalSignals,
   buildLocalReportSections,
-  buildSynthesisPrompt,
   constrainMoodScaleLanguage,
   formatReportSectionsMarkdown,
-  formatSessionBriefMarkdown,
   hasEnoughBriefData,
-  parseStructuredBrief,
 } from "./sessionBriefLogic";
+import {
+  buildChangeBriefPrompt,
+  buildLocalChangeBrief,
+  collectEvidenceItems,
+  filterInputsSinceLastWeek,
+  filterInputsSinceSnapshot,
+  formatChangeBriefMarkdown,
+  parseChangeBrief,
+  snapshotFromChangeBrief,
+} from "./changeBriefLogic";
 import {
   getCheckIns,
   getChatReports,
   getDiaryEntries,
+  getLatestBriefSnapshot,
   getLatestSessionBriefRecord,
   getUserName,
+  saveBriefSnapshot,
   saveSessionBriefRecord,
 } from "./localData";
-
-function sessionBriefSystemInstruction() {
-  return `${SYSTEM_INSTRUCTION_SUMMARY}\n\n${SYSTEM_INSTRUCTION_SESSION_BRIEF}`;
-}
 
 function applyMoodConstraintToSections(sections) {
   const next = {};
@@ -39,6 +41,16 @@ function applyMoodConstraintToSections(sections) {
     next[key] = constrainMoodScaleLanguage(value);
   });
   return next;
+}
+
+function windowInputsForBrief(inputs, priorSnapshot, windowMode) {
+  if (windowMode === "last-week") {
+    return filterInputsSinceLastWeek(inputs);
+  }
+  if (priorSnapshot) {
+    return filterInputsSinceSnapshot(inputs, priorSnapshot);
+  }
+  return inputs;
 }
 
 export async function loadSessionBriefInputs() {
@@ -51,7 +63,17 @@ export async function loadSessionBriefInputs() {
   return { entries, checkIns, summaries, userName };
 }
 
-export async function generateSessionBriefArtifact({ forceLocal = false } = {}) {
+function sameIdSet(left = [], right = []) {
+  if (left.length !== right.length) return false;
+  const set = new Set(left);
+  return right.every((id) => set.has(id));
+}
+
+export async function generateSessionBriefArtifact({
+  forceLocal = false,
+  windowMode = "last-brief",
+  persistSnapshot = true,
+} = {}) {
   const inputs = await loadSessionBriefInputs();
   if (!hasEnoughBriefData(inputs)) {
     const error = new Error(
@@ -61,51 +83,89 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
     throw error;
   }
 
+  const priorSnapshot = await getLatestBriefSnapshot();
   const analysis = analyzeLocalSignals(inputs);
+  const scopedInputs = windowInputsForBrief(inputs, priorSnapshot, windowMode);
+  const windowAnalysis = priorSnapshot
+    ? analyzeLocalSignals({ ...scopedInputs, userName: inputs.userName })
+    : analysis;
+  const evidenceCandidates = collectEvidenceItems(
+    priorSnapshot ? scopedInputs : inputs
+  );
+
+  const localChange = buildLocalChangeBrief({
+    inputs,
+    priorSnapshot,
+    windowMode,
+  });
+
+  let changeBrief = localChange;
   let mode = "local-demo";
-  let sections;
-  let rawFallback = "";
   let warning = null;
 
   const geminiReady = await checkGeminiConfigured();
   if (!forceLocal && geminiReady) {
     try {
       const { systemInstruction } = await withClinicalContext(
-        sessionBriefSystemInstruction(),
-        buildContextQueryFromAnalysis(analysis)
+        SYSTEM_INSTRUCTION_CHANGE_BRIEF,
+        buildContextQueryFromAnalysis(windowAnalysis)
       );
       const raw = await generateGeminiText({
-        contents: buildSynthesisPrompt(analysis),
+        contents: buildChangeBriefPrompt({
+          kind: localChange.kind,
+          priorSnapshot,
+          analysis,
+          windowAnalysis,
+          evidenceCandidates,
+          windowLabel: localChange.windowLabel,
+        }),
         systemInstruction,
         task: "brief",
       });
-      const parsed = parseStructuredBrief(raw);
-      sections = applyMoodConstraintToSections(parsed.sections);
-      rawFallback = constrainMoodScaleLanguage(parsed.rawFallback || "");
+      changeBrief = parseChangeBrief(raw, localChange);
       mode = "gemini";
     } catch (error) {
       warning =
         error?.code === "MISSING_API_KEY"
           ? error.message
-          : `Gemini was unavailable (${error.message}). Showing an on-device demo brief instead.`;
-      sections = buildLocalReportSections(analysis, {
-        reason: "Gemini fallback",
-      });
+          : `Gemini was unavailable (${error.message}). Showing an on-device change Brief instead.`;
+      changeBrief = localChange;
     }
   } else {
     warning = geminiReady
       ? null
-      : "Gemini is not configured on the server (GEMINI_KEY). This is an on-device demo brief using the same clinician structure.";
-    sections = buildLocalReportSections(analysis, {
-      reason: "API key not configured",
-    });
+      : "Gemini is not configured on the server (GEMINI_KEY). This is an on-device change Brief using mood, tags, and risk language from stored notes.";
+    changeBrief = localChange;
   }
 
+  const sections = applyMoodConstraintToSections(
+    buildLocalReportSections(analysis, {
+      reason: mode === "gemini" ? "fuller note" : "Gemini fallback",
+    })
+  );
   const narrative = formatReportSectionsMarkdown(sections);
-  const markdown = formatSessionBriefMarkdown(analysis, {
+  const markdown = formatChangeBriefMarkdown(changeBrief, {
+    analysis,
     sections,
-    rawFallback,
   });
+
+  let snapshot = priorSnapshot;
+  const identicalSources =
+    priorSnapshot &&
+    sameIdSet(priorSnapshot.sourceEntryIds, changeBrief.sourceEntryIds);
+  if (persistSnapshot && !identicalSources) {
+    snapshot = await saveBriefSnapshot(
+      snapshotFromChangeBrief(changeBrief, {
+        now: new Date(),
+      })
+    );
+  }
+  changeBrief = {
+    ...changeBrief,
+    snapshotId: snapshot?.id || null,
+    priorSnapshotId: priorSnapshot?.id || null,
+  };
+
   const record = await saveSessionBriefRecord({
     mode,
     warning,
@@ -113,7 +173,10 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
     analysis,
     narrative,
     sections,
-    rawFallback,
+    rawFallback: "",
+    changeBrief,
+    snapshotId: snapshot?.id || null,
+    priorSnapshotId: priorSnapshot?.id || null,
   });
 
   return record;
@@ -121,4 +184,8 @@ export async function generateSessionBriefArtifact({ forceLocal = false } = {}) 
 
 export async function loadCachedSessionBrief() {
   return getLatestSessionBriefRecord();
+}
+
+export async function loadLatestBriefSnapshot() {
+  return getLatestBriefSnapshot();
 }

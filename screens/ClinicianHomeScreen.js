@@ -22,6 +22,11 @@ import {
   parseStructuredBrief,
   REPORT_SECTIONS,
 } from "../utils/sessionBriefLogic";
+import {
+  formatSafetyConcernLabel,
+  themesByPolarity,
+  WINDOW_LABELS,
+} from "../utils/changeBriefLogic";
 import { consumePendingBriefGeneration } from "../utils/localData";
 import { shareOrCopyText } from "../utils/shareText";
 import { colors, fonts, radius } from "../utils/theme";
@@ -39,6 +44,33 @@ function resolveBriefSections(brief) {
     return parseStructuredBrief(brief.narrative);
   }
   return { sections: null, rawFallback: "" };
+}
+
+function formatChipDate(value) {
+  const raw = String(value || "");
+  const isoDay = raw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDay)) return "";
+  const [year, month, day] = isoDay.split("-");
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  if (Number.isNaN(date.getTime())) return isoDay;
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function windowCaption(changeBrief) {
+  if (!changeBrief) return "";
+  if (changeBrief.kind === "baseline") {
+    return "No prior Brief snapshot — saving this visit as the next comparison point.";
+  }
+  const start = formatChipDate(changeBrief.windowStart);
+  const end = formatChipDate(changeBrief.windowEnd);
+  if (start && end) return `${start} – ${end}`;
+  return "Notes after the last saved Brief.";
+}
+
+function concernTone(concern) {
+  if (concern === "elevated") return "elevated";
+  if (concern === "monitor") return "monitor";
+  return "none";
 }
 
 function ReportSectionCard({ section, body }) {
@@ -77,6 +109,114 @@ function Panel({ title, children }) {
   );
 }
 
+function EvidenceChip({ evidence }) {
+  if (!evidence?.text) return null;
+  const source = evidence.sourceType === "diary" ? "diary" : "chat";
+  const when = formatChipDate(evidence.createdAt);
+  return (
+    <View style={styles.chip}>
+      <Text style={styles.chipQuote}>“{evidence.text}”</Text>
+      <Text style={styles.chipMeta}>
+        {source}
+        {when ? ` · ${when}` : ""}
+      </Text>
+    </View>
+  );
+}
+
+function ClaimCard({ theme }) {
+  return (
+    <View style={styles.claimCard}>
+      <Text style={styles.claimText}>{theme.claim}</Text>
+      {(theme.evidence || []).length > 0 ? (
+        <View style={styles.chipRow}>
+          {theme.evidence.slice(0, 2).map((evidence, index) => (
+            <EvidenceChip
+              key={`${theme.label}-${index}-${evidence.text}`}
+              evidence={evidence}
+            />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.finePrint}>No quote stored for this claim.</Text>
+      )}
+    </View>
+  );
+}
+
+function ChangeSection({ title, themes, emptyLabel }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {themes.length > 0 ? (
+        themes.map((theme, index) => (
+          <ClaimCard key={`${theme.label}-${index}`} theme={theme} />
+        ))
+      ) : (
+        <Text style={styles.emptyMuted}>{emptyLabel}</Text>
+      )}
+    </View>
+  );
+}
+
+function SafetyStrip({ safety }) {
+  const summary = safety || {
+    concern: "none",
+    siOrSelfHarm: false,
+    otherRisk: false,
+    items: [],
+    stillOpen: [],
+  };
+  const tone = concernTone(summary.concern);
+  return (
+    <View
+      style={[
+        styles.safetyStrip,
+        tone === "elevated" && styles.safetyElevated,
+        tone === "monitor" && styles.safetyMonitor,
+      ]}
+      accessibilityRole="summary"
+    >
+      <Text style={styles.safetyKicker}>Safety</Text>
+      <Text
+        style={[
+          styles.safetyConcern,
+          tone === "elevated" && styles.safetyConcernElevated,
+        ]}
+      >
+        {formatSafetyConcernLabel(summary.concern)}
+      </Text>
+      <Text style={styles.sectionContent}>
+        {summary.siOrSelfHarm
+          ? "Suicidal ideation or self-harm language is present in this window. Review the original wording in the room."
+          : "No suicidal ideation or self-harm language detected in this window."}
+      </Text>
+      {summary.otherRisk ? (
+        <Text style={styles.sectionContent}>
+          Other risk language was flagged in stored notes.
+        </Text>
+      ) : null}
+      {(summary.items || []).map((item) => (
+        <Text key={item.text} style={styles.sectionContent}>
+          • {item.text}
+        </Text>
+      ))}
+      {(summary.stillOpen || []).length > 0 ? (
+        <>
+          <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
+            Still open from last Brief
+          </Text>
+          {summary.stillOpen.map((item) => (
+            <Text key={item} style={styles.sectionContent}>
+              • {item}
+            </Text>
+          ))}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 export default function ClinicianHomeScreen() {
   const { width } = useWindowDimensions();
   const split = width >= 960;
@@ -85,21 +225,36 @@ export default function ClinicianHomeScreen() {
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState("");
   const [shareStatus, setShareStatus] = useState("");
+  const [showFullerNote, setShowFullerNote] = useState(false);
+  const [windowMode, setWindowMode] = useState("last-brief");
   const { configured: geminiReady } = useGeminiConfigured();
 
-  const runGeneration = useCallback(async ({ forceLocal = false } = {}) => {
-    setIsGenerating(true);
-    setError("");
-    try {
-      const record = await generateSessionBriefArtifact({ forceLocal });
-      setBrief(record);
-      if (record?.analysis) setAnalysis(record.analysis);
-    } catch (err) {
-      setError(err.message || "Failed to generate Session Brief.");
-    } finally {
-      setIsGenerating(false);
-    }
-  }, []);
+  const runGeneration = useCallback(
+    async ({
+      forceLocal = false,
+      nextWindowMode,
+      persistSnapshot = true,
+    } = {}) => {
+      const mode = nextWindowMode || windowMode;
+      setIsGenerating(true);
+      setError("");
+      try {
+        const record = await generateSessionBriefArtifact({
+          forceLocal,
+          windowMode: mode,
+          persistSnapshot,
+        });
+        setBrief(record);
+        if (record?.analysis) setAnalysis(record.analysis);
+        if (nextWindowMode) setWindowMode(nextWindowMode);
+      } catch (err) {
+        setError(err.message || "Failed to generate Session Brief.");
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    [windowMode]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -118,12 +273,16 @@ export default function ClinicianHomeScreen() {
         }
         const shouldGenerate = await consumePendingBriefGeneration();
         if (cancelled) return;
-        if (!cached && hasEnoughBriefData(inputs)) {
-          await runGeneration({ forceLocal: true });
+        const needsChangeBrief = !cached?.changeBrief;
+        if (needsChangeBrief && hasEnoughBriefData(inputs)) {
+          await runGeneration({ forceLocal: true, persistSnapshot: false });
           if (cancelled) return;
         }
-        if (shouldGenerate || (!cached && hasEnoughBriefData(inputs))) {
-          runGeneration({ forceLocal: false });
+        if (
+          shouldGenerate ||
+          (needsChangeBrief && hasEnoughBriefData(inputs))
+        ) {
+          runGeneration({ forceLocal: false, persistSnapshot: true });
         }
       } catch (err) {
         if (!cancelled) {
@@ -146,6 +305,7 @@ export default function ClinicianHomeScreen() {
   };
 
   const liveAnalysis = analysis || brief?.analysis;
+  const changeBrief = brief?.changeBrief || null;
   const trajectory = liveAnalysis?.moodTrajectory || [];
   const tagEntries = Object.entries(liveAnalysis?.tagFrequency || {}).sort(
     (a, b) => b[1] - a[1]
@@ -154,6 +314,12 @@ export default function ClinicianHomeScreen() {
   const stressors = liveAnalysis?.correlations;
   const excerpts = stressors?.excerpts || [];
   const structuredBrief = resolveBriefSections(brief);
+  const isBaseline = !changeBrief || changeBrief.kind === "baseline";
+  const improved = themesByPolarity(changeBrief?.themes, "improved");
+  const worse = themesByPolarity(changeBrief?.themes, "worse");
+  const newer = themesByPolarity(changeBrief?.themes, "new");
+  const hasSnapshot = Boolean(brief?.snapshotId || changeBrief?.snapshotId);
+  const showWindowSwitch = Boolean(brief?.priorSnapshotId);
 
   const briefColumn = (
     <ScrollView
@@ -166,6 +332,58 @@ export default function ClinicianHomeScreen() {
         Same on-device diary and chat notes as Teen mode. This shell is the
         clinician lens — not a second database.
       </Text>
+
+      <View style={styles.windowPill}>
+        <Text style={styles.windowLabel}>
+          {changeBrief?.windowLabel ||
+            (hasSnapshot
+              ? WINDOW_LABELS.sinceLastBrief
+              : WINDOW_LABELS.firstVisit)}
+        </Text>
+        <Text style={styles.windowCaption}>
+          {windowCaption(changeBrief) ||
+            "Generate a Brief to save a snapshot for next time."}
+        </Text>
+      </View>
+
+      {showWindowSwitch ? (
+        <View style={styles.windowSwitch}>
+          <TouchableOpacity
+            style={[
+              styles.windowOption,
+              windowMode === "last-brief" && styles.windowOptionOn,
+            ]}
+            onPress={() => runGeneration({ nextWindowMode: "last-brief" })}
+            disabled={isGenerating}
+          >
+            <Text
+              style={[
+                styles.windowOptionText,
+                windowMode === "last-brief" && styles.windowOptionTextOn,
+              ]}
+            >
+              {WINDOW_LABELS.sinceLastBrief}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.windowOption,
+              windowMode === "last-week" && styles.windowOptionOn,
+            ]}
+            onPress={() => runGeneration({ nextWindowMode: "last-week" })}
+            disabled={isGenerating}
+          >
+            <Text
+              style={[
+                styles.windowOptionText,
+                windowMode === "last-week" && styles.windowOptionTextOn,
+              ]}
+            >
+              {WINDOW_LABELS.sinceLastWeek}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View
         style={[
@@ -198,7 +416,7 @@ export default function ClinicianHomeScreen() {
             <ActivityIndicator color={colors.surface} />
           ) : (
             <Text style={styles.primaryButtonText}>
-              {brief ? "Regenerate Session Brief" : "Generate Session Brief"}
+              {brief ? "Refresh Session Brief" : "Generate Session Brief"}
             </Text>
           )}
         </TouchableOpacity>
@@ -211,6 +429,12 @@ export default function ClinicianHomeScreen() {
         </TouchableOpacity>
         {shareStatus ? (
           <Text style={styles.shareStatus}>{shareStatus}</Text>
+        ) : null}
+        {brief?.snapshotId ? (
+          <Text style={styles.shareStatus}>
+            Snapshot saved for next time — later notes compare{" "}
+            {WINDOW_LABELS.sinceLastBrief.toLowerCase()}.
+          </Text>
         ) : null}
       </View>
 
@@ -230,88 +454,120 @@ export default function ClinicianHomeScreen() {
         </View>
       ) : null}
 
+      {changeBrief || liveAnalysis ? (
+        <SafetyStrip safety={changeBrief?.safetySummary} />
+      ) : null}
+
       {liveAnalysis ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Data used</Text>
+          <Text style={styles.sectionContent}>
+            {liveAnalysis.dataSources?.diaryEntries || 0} journal entries ·{" "}
+            {liveAnalysis.dataSources?.checkIns || 0} check-ins ·{" "}
+            {liveAnalysis.dataSources?.chatReports || 0} chat reports
+          </Text>
+          <Text style={styles.sectionContent}>
+            {liveAnalysis.moodSummary.count > 0
+              ? `Self-rated mood (1–10): avg ${liveAnalysis.moodSummary.average}/10 (range ${liveAnalysis.moodSummary.min}–${liveAnalysis.moodSummary.max}). ${liveAnalysis.moodSummary.trend}`
+              : "No self-rated mood scores stored yet."}
+          </Text>
+        </View>
+      ) : null}
+
+      {changeBrief && isBaseline ? (
         <>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Data used</Text>
-            <Text style={styles.sectionContent}>
-              {liveAnalysis.dataSources?.diaryEntries || 0} journal entries ·{" "}
-              {liveAnalysis.dataSources?.checkIns || 0} check-ins ·{" "}
-              {liveAnalysis.dataSources?.chatReports || 0} chat reports
-            </Text>
-            <Text style={styles.sectionContent}>
-              {liveAnalysis.moodSummary.count > 0
-                ? `Self-rated mood (1–10): avg ${liveAnalysis.moodSummary.average}/10 (range ${liveAnalysis.moodSummary.min}–${liveAnalysis.moodSummary.max}). ${liveAnalysis.moodSummary.trend}`
-                : "No self-rated mood scores stored yet."}
-            </Text>
+            <Text style={styles.sectionTitle}>Presenting concerns</Text>
+            {(changeBrief.presentingConcerns || []).map((item) => (
+              <Text key={item} style={styles.sectionContent}>
+                • {item}
+              </Text>
+            ))}
           </View>
-
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Suggested opening questions</Text>
-            {(liveAnalysis.openingQuestions || []).length > 0 ? (
-              liveAnalysis.openingQuestions.map((question) => (
-                <Text key={question} style={styles.sectionContent}>
-                  • {question}
-                </Text>
+            <Text style={styles.sectionTitle}>Themes</Text>
+            {(changeBrief.themes || []).length > 0 ? (
+              changeBrief.themes.map((theme, index) => (
+                <ClaimCard key={`${theme.label}-${index}`} theme={theme} />
               ))
             ) : (
-              <Text style={styles.sectionContent}>
-                Generate a brief to get suggested openers.
+              <Text style={styles.emptyMuted}>
+                No themes extracted from stored notes yet.
               </Text>
             )}
           </View>
-
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Observational signals (user-reported)
-            </Text>
-            <Text style={styles.finePrint}>
-              Keyword mentions from journal/check-in text. Not a PHQ-9 score or
-              diagnosis.
-            </Text>
-            {(liveAnalysis.observationalSignals || []).length > 0 ? (
-              liveAnalysis.observationalSignals.map((signal) => (
-                <Text key={signal.id} style={styles.sectionContent}>
-                  • {signal.label} — {signal.mentionCount} mention
-                  {signal.mentionCount === 1 ? "" : "s"} in{" "}
-                  {signal.sources.join(", ")}
-                </Text>
-              ))
-            ) : (
-              <Text style={styles.sectionContent}>
-                No PHQ-adjacent phrases detected in stored user text.
+            <Text style={styles.sectionTitle}>Unknowns</Text>
+            {(changeBrief.unknowns || []).map((item) => (
+              <Text key={item} style={styles.sectionContent}>
+                • {item}
               </Text>
-            )}
+            ))}
           </View>
         </>
       ) : null}
 
+      {changeBrief && !isBaseline ? (
+        <>
+          {changeBrief.emptyWindow ? (
+            <Text style={styles.emptyMuted}>
+              No new diary or chat notes since last Brief. Safety and session
+              focus carry forward.
+            </Text>
+          ) : null}
+          <ChangeSection
+            title="Improved"
+            themes={improved}
+            emptyLabel="None noted in this window."
+          />
+          <ChangeSection
+            title="Harder or stuck"
+            themes={worse}
+            emptyLabel="None noted in this window."
+          />
+          <ChangeSection
+            title="New since last time"
+            themes={newer}
+            emptyLabel="None noted in this window."
+          />
+        </>
+      ) : null}
+
+      {changeBrief ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Session focus</Text>
+          <Text style={styles.finePrint}>Clarify in the room</Text>
+          {(changeBrief.sessionFocus || []).map((item) => (
+            <Text key={item} style={styles.sectionContent}>
+              • {item}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
       {brief ? (
         <View style={styles.reportBlock}>
-          <Text style={styles.sectionTitle}>Preliminary clinician report</Text>
-          <Text style={styles.finePrint}>
-            Same 11-section harness on every regenerate. Missing evidence stays
-            “Not disclosed in conversation” — the layout does not reshuffle.
-          </Text>
-          {REPORT_SECTIONS.map((section) => (
-            <ReportSectionCard
-              key={section.id}
-              section={section}
-              body={structuredBrief.sections?.[section.id]}
-            />
-          ))}
-          {structuredBrief.rawFallback ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Unstructured model notes</Text>
-              <Text style={styles.finePrint}>
-                The model did not return parseable 11-section JSON. Scaffold
-                above is unchanged.
-              </Text>
-              <Markdown style={markdownStyles}>
-                {structuredBrief.rawFallback}
-              </Markdown>
-            </View>
-          ) : null}
+          <TouchableOpacity
+            style={styles.fullerToggle}
+            onPress={() => setShowFullerNote((value) => !value)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.fullerToggleText}>
+              {showFullerNote ? "Hide fuller note" : "Show fuller note"}
+            </Text>
+            <Text style={styles.finePrint}>
+              Optional 11-section export. Not the default clinician view.
+            </Text>
+          </TouchableOpacity>
+          {showFullerNote
+            ? REPORT_SECTIONS.map((section) => (
+                <ReportSectionCard
+                  key={section.id}
+                  section={section}
+                  body={structuredBrief.sections?.[section.id]}
+                />
+              ))
+            : null}
         </View>
       ) : null}
     </ScrollView>
@@ -368,6 +624,26 @@ export default function ClinicianHomeScreen() {
             {excerpt.date} ({excerpt.mood}/10): {excerpt.text}
           </Text>
         ))}
+      </Panel>
+
+      <Panel title="Observational signals (user-reported)">
+        <Text style={styles.finePrint}>
+          Keyword mentions from journal/check-in text. Not a PHQ-9 score or
+          diagnosis.
+        </Text>
+        {(liveAnalysis?.observationalSignals || []).length > 0 ? (
+          liveAnalysis.observationalSignals.map((signal) => (
+            <Text key={signal.id} style={styles.sectionContent}>
+              • {signal.label} — {signal.mentionCount} mention
+              {signal.mentionCount === 1 ? "" : "s"} in{" "}
+              {signal.sources.join(", ")}
+            </Text>
+          ))
+        ) : (
+          <Text style={styles.sectionContent}>
+            No PHQ-adjacent phrases detected in stored user text.
+          </Text>
+        )}
       </Panel>
     </ScrollView>
   );
@@ -477,6 +753,52 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 12,
   },
+  windowPill: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    marginBottom: 10,
+  },
+  windowLabel: {
+    fontSize: 13,
+    fontFamily: fonts.metaSemi,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  windowCaption: {
+    fontSize: 13,
+    fontFamily: fonts.meta,
+    color: colors.muted,
+    lineHeight: 18,
+  },
+  windowSwitch: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  windowOption: {
+    flex: 1,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  windowOptionOn: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  windowOptionText: {
+    fontSize: 12,
+    fontFamily: fonts.metaMedium,
+    color: colors.muted,
+  },
+  windowOptionTextOn: {
+    color: colors.accent,
+  },
   statusBanner: {
     borderRadius: radius,
     padding: 12,
@@ -572,6 +894,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
   },
+  emptyMuted: {
+    fontSize: 14,
+    fontFamily: fonts.metaItalic,
+    color: colors.muted,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
   section: {
     marginBottom: 16,
     padding: 14,
@@ -633,6 +962,20 @@ const styles = StyleSheet.create({
   reportBlock: {
     marginBottom: 8,
   },
+  fullerToggle: {
+    marginBottom: 10,
+    padding: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  fullerToggleText: {
+    fontSize: 14,
+    fontFamily: fonts.metaSemi,
+    color: colors.accent,
+    marginBottom: 4,
+  },
   reportCard: {
     marginBottom: 10,
     padding: 14,
@@ -690,5 +1033,73 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 17,
     marginBottom: 8,
+  },
+  safetyStrip: {
+    marginBottom: 16,
+    padding: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  safetyMonitor: {
+    backgroundColor: colors.accentSoft,
+  },
+  safetyElevated: {
+    borderColor: colors.danger,
+    backgroundColor: colors.surface,
+  },
+  safetyKicker: {
+    fontSize: 11,
+    fontFamily: fonts.metaSemi,
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  safetyConcern: {
+    fontSize: 16,
+    fontFamily: fonts.title,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  safetyConcernElevated: {
+    color: colors.danger,
+  },
+  claimCard: {
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  claimText: {
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: colors.text,
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  chipRow: {
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  chipQuote: {
+    fontSize: 13,
+    fontFamily: fonts.body,
+    color: colors.text,
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  chipMeta: {
+    fontSize: 11,
+    fontFamily: fonts.meta,
+    color: colors.muted,
   },
 });

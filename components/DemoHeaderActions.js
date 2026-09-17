@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppMode } from "./AppModeContext";
 import { APP_MODES, modeToggleLabel } from "../utils/appMode";
+import { clearOnDeviceRecords } from "../utils/localData";
 import { colors, fonts, radius } from "../utils/theme";
 
 export default function DemoHeaderActions({ navigation }) {
@@ -11,6 +12,7 @@ export default function DemoHeaderActions({ navigation }) {
 
   const resetDemo = async () => {
     try {
+      await clearOnDeviceRecords();
       await AsyncStorage.clear();
       await setMode(APP_MODES.teen);
       navigation.navigate("Welcome");

@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   lastReportPath: "@last_report_path",
   lastReportDate: "@last_report_date",
   lastSessionBriefPath: "@last_session_brief_path",
+  lastBriefSnapshotPath: "@last_brief_snapshot_path",
   pendingBrief: "@pending_session_brief",
   dailyChatMessages: "@daily_chat_messages",
   appMode: "@app_mode",
@@ -117,6 +118,7 @@ export async function saveDiaryEntry({
     response,
     mood,
     tags,
+    createdAt: now.toISOString(),
   });
   const serialized = JSON.stringify(record);
   await writeFile(fileName, serialized);
@@ -269,6 +271,87 @@ export async function getLatestSessionBriefRecord() {
     return JSON.parse(await readFile(files[0]));
   } catch {
     return null;
+  }
+}
+
+export async function saveBriefSnapshot(snapshot) {
+  const now = new Date();
+  const date = getFormattedDate(now);
+  const stamp = getUniqueStamp(now);
+  const id = snapshot?.id || `briefSnapshot-${date}-${stamp}`;
+  const fileName = `${id}.json`;
+  const payload = {
+    ...snapshot,
+    id,
+    createdAt: snapshot?.createdAt || now.toISOString(),
+    windowEnd: snapshot?.windowEnd || now.toISOString(),
+  };
+  const path = await writeFile(fileName, JSON.stringify(payload));
+  await AsyncStorage.setItem(STORAGE_KEYS.lastBriefSnapshotPath, path);
+  return { ...payload, path, fileName };
+}
+
+export async function getLatestBriefSnapshot() {
+  const lastPath = await AsyncStorage.getItem(STORAGE_KEYS.lastBriefSnapshotPath);
+  if (lastPath) {
+    try {
+      const raw = await readStoredText(lastPath);
+      if (raw) return JSON.parse(raw);
+    } catch (error) {
+      console.error("Failed to load last brief snapshot:", error);
+    }
+  }
+
+  const files = await listKeys("briefSnapshot-", ".json");
+  files.sort((a, b) => b.localeCompare(a));
+  if (files.length === 0) return null;
+  try {
+    return JSON.parse(await readFile(files[0]));
+  } catch {
+    return null;
+  }
+}
+
+export async function listBriefSnapshots() {
+  const files = await listKeys("briefSnapshot-", ".json");
+  const snapshots = [];
+  for (const file of files) {
+    try {
+      const raw = await readFile(file);
+      if (!raw) continue;
+      snapshots.push({ ...JSON.parse(raw), file });
+    } catch (error) {
+      console.error("Failed to parse brief snapshot:", file, error);
+    }
+  }
+  snapshots.sort((a, b) =>
+    String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+  );
+  return snapshots;
+}
+
+export async function clearOnDeviceRecords() {
+  const prefixes = [
+    "diary-",
+    "checkin-",
+    "userReport-",
+    "sessionBrief-",
+    "briefSnapshot-",
+  ];
+  const storage = webStorage();
+  if (storage) {
+    Object.keys(storage)
+      .filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
+      .forEach((key) => storage.removeItem(key));
+    return;
+  }
+  const directory = FileSystem.documentDirectory;
+  if (!directory) return;
+  const files = await FileSystem.readDirectoryAsync(directory);
+  for (const file of files) {
+    if (prefixes.some((prefix) => file.startsWith(prefix))) {
+      await FileSystem.deleteAsync(`${directory}${file}`, { idempotent: true });
+    }
   }
 }
 
