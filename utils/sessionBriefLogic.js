@@ -179,14 +179,17 @@ function buildDiaryRecord({
   response = "",
   mood,
   tags,
+  createdAt,
 } = {}) {
-  return {
+  const record = {
     date,
     prompt: String(prompt || ""),
     response: String(response || ""),
     mood: normalizeMood(mood),
     tags: normalizeTags(tags),
   };
+  if (createdAt) record.createdAt = createdAt;
+  return record;
 }
 
 function parseDiaryRecord(raw, extra = {}) {
