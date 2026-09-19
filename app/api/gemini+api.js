@@ -1,3 +1,4 @@
+import { evaluateApiGuard, guardJsonResponse } from "../../server/apiGuard.js";
 import {
   generateGeminiText,
   isServerGeminiConfigured,
@@ -17,11 +18,24 @@ function healthPayload() {
   };
 }
 
-export async function GET() {
+function deny(request) {
+  const guard = evaluateApiGuard(request);
+  if (!guard.ok) {
+    return guardJsonResponse(guard);
+  }
+  return null;
+}
+
+export async function GET(request) {
+  const blocked = deny(request);
+  if (blocked) return blocked;
   return json(healthPayload());
 }
 
 export async function POST(request) {
+  const blocked = deny(request);
+  if (blocked) return blocked;
+
   let raw = "";
   try {
     raw = await request.text();

@@ -1,7 +1,16 @@
-import { retrieveClinicalContext } from "../../server/retrieveContext";
+import { evaluateApiGuard, guardJsonResponse } from "../../server/apiGuard.js";
+import { retrieveClinicalContext } from "../../server/retrieveContext.js";
 
 function json(body, status = 200) {
   return Response.json(body, { status });
+}
+
+function deny(request) {
+  const guard = evaluateApiGuard(request);
+  if (!guard.ok) {
+    return guardJsonResponse(guard, { context: "", matches: [] });
+  }
+  return null;
 }
 
 export async function GET() {
@@ -12,6 +21,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const blocked = deny(request);
+  if (blocked) return blocked;
+
   let body = {};
   try {
     body = await request.json();

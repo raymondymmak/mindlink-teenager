@@ -2,6 +2,7 @@ import assert from "assert";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { DEFAULT_MINDLINK_API_TOKEN } from "../utils/apiAuth.js";
 import {
   DEFAULT_GEMINI_API_URL,
   DEFAULT_GEMINI_MODEL,
@@ -27,6 +28,7 @@ assert.ok(!clientSource.includes("process.env.GEMINI_KEY"));
 assert.ok(!clientSource.includes("process.env.GEMINI_API_KEY"));
 assert.ok(!clientSource.includes("GoogleGenAI"));
 assert.ok(!clientSource.includes("generativelanguage.googleapis.com"));
+assert.ok(clientSource.includes("mindLinkApiHeaders"));
 
 assert.strictEqual(DEFAULT_GEMINI_MODEL, "auto");
 assert.strictEqual(GEMINI_LITE_MODEL, "gemini-3.5-flash-lite");
@@ -114,6 +116,11 @@ assert.strictEqual(isGeminiConfigured(), true);
 assert.strictEqual(calls[0].method, "POST");
 const healthBody = JSON.parse(calls[0].options.body);
 assert.strictEqual(healthBody.health, true);
+assert.strictEqual(
+  calls[0].options.headers.Authorization,
+  `Bearer ${process.env.EXPO_PUBLIC_MINDLINK_API_TOKEN || DEFAULT_MINDLINK_API_TOKEN}`
+);
+assert.ok(calls[0].options.headers["X-MindLink-Token"]);
 
 const text = await generateGeminiText({
   contents: "Reply with exactly: pong",

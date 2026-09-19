@@ -7,7 +7,7 @@ Open PRs against **`main` only**. GitHub Actions deploys:
 - PRs → EAS Hosting **staging** (`https://raymondmak-app1--staging.expo.app/`)
 - merge/push to `main` → **production** (`https://raymondmak-app1.expo.app/`)
 
-Do **not** run `eas deploy --prod`. Do **not** run `eas deploy` unless you are debugging CI (staging only). Full rules and required secrets (`EXPO_TOKEN`, EAS `GEMINI_KEY` / `PINECONE_KEY`): [DEPLOY.md](./DEPLOY.md).
+Do **not** run `eas deploy --prod`. Do **not** run `eas deploy` unless you are debugging CI (staging only). Full rules and required secrets (`EXPO_TOKEN`, EAS `GEMINI_KEY` / `PINECONE_KEY` / `MINDLINK_API_TOKEN`): [DEPLOY.md](./DEPLOY.md).
 
 ## Cursor Cloud specific instructions
 
@@ -38,4 +38,4 @@ If you see the overlay anyway:
 2. Run `node scripts/ensure-dotenv.js`.
 3. Restart Expo with `--reset-cache`.
 4. Do not commit `.env` or print `GEMINI_KEY` / `PINECONE_KEY`.
-5. Never put `GEMINI_KEY` in `EXPO_PUBLIC_*`. Chat/Brief go through `POST /api/gemini`; configured-ness is `POST /api/gemini` `{ "health": true }` → `{ configured }`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`.
+5. Never put `GEMINI_KEY` in `EXPO_PUBLIC_*`. Chat/Brief go through `POST /api/gemini`; configured-ness is `POST /api/gemini` `{ "health": true }` → `{ configured }` (send `Authorization: Bearer` / `X-MindLink-Token` matching `MINDLINK_API_TOKEN`). Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`. `EXPO_PUBLIC_MINDLINK_API_TOKEN` is a public *gate*, not a capability secret — still rate-limited.

@@ -71,6 +71,8 @@ POST /api/gemini { "health": true } → { "configured": true|false }
 POST /api/gemini { "contents", "systemInstruction", "task": "chat"|"brief" } → { "text" }
 ```
 
+Both `/api/gemini` and `/api/context` require `Authorization: Bearer <MINDLINK_API_TOKEN>` or `X-MindLink-Token`. The Expo client sends `EXPO_PUBLIC_MINDLINK_API_TOKEN` (a public *gate*, default `mindlink-demo-gate-v1` — not `GEMINI_KEY`). Missing/wrong token → **401**. More than **30 requests / 10 min / IP** or **120 / 10 min / token** → **429**.
+
 EAS Hosting serves the SPA HTML for `GET /api/*`, so configured-ness is a POST like generate. `GET /api/gemini` still works in local Metro.
 
 On web, the client calls same-origin `/api/gemini`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/gemini` unless `EXPO_PUBLIC_GEMINI_API_URL` is set. Demo mode is decided by that health check, not by shipping the key to the browser.
@@ -106,9 +108,13 @@ Set them on EAS as **sensitive** (not `secret` — EAS Hosting cannot deploy sec
 ```bash
 npx eas-cli env:create preview --name PINECONE_KEY --value "$PINECONE_KEY" --visibility sensitive --non-interactive
 npx eas-cli env:create preview --name GEMINI_KEY --value "$GEMINI_KEY" --visibility sensitive --non-interactive
+npx eas-cli env:create preview --name MINDLINK_API_TOKEN --value "$MINDLINK_API_TOKEN" --visibility sensitive --non-interactive
 npx eas-cli env:create production --name PINECONE_KEY --value "$PINECONE_KEY" --visibility sensitive --non-interactive
 npx eas-cli env:create production --name GEMINI_KEY --value "$GEMINI_KEY" --visibility sensitive --non-interactive
+npx eas-cli env:create production --name MINDLINK_API_TOKEN --value "$MINDLINK_API_TOKEN" --visibility sensitive --non-interactive
 ```
+
+Set `MINDLINK_API_TOKEN` on EAS preview + production to the same value as `EXPO_PUBLIC_MINDLINK_API_TOKEN` (see [DEPLOY.md](./DEPLOY.md)). Unauthenticated callers cannot generate or retrieve RAG text.
 
 `@react-navigation/native` is pinned to `^7.3.18` so Expo Router's server export can load `createScreenFactory`. The teenager UI is still the existing React Navigation `App.js`, wrapped by a one-route `app/` shell. Nested stack/tab names can appear in the URL; `app/+not-found.js` redirects those reloads to `/`, and the web app pins the address bar to `/` so in-app navigation does not remount the shell.
 
@@ -136,7 +142,10 @@ node scripts/test-teen-week.js
 node scripts/test-gemini-client.mjs
 node scripts/test-gemini-generate.mjs
 node scripts/test-gemini-api.mjs
+node scripts/test-api-auth.mjs
+node scripts/test-api-guard.mjs
 node scripts/test-context-api.mjs
+node scripts/test-context-route.mjs
 node scripts/test-retrieve-context.mjs
 ```
 

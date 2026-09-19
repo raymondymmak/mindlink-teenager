@@ -1,3 +1,5 @@
+import { mindLinkApiHeaders } from "./apiAuth.js";
+
 export const SAME_ORIGIN_CONTEXT_PATH = "/api/context";
 export const PRODUCTION_CONTEXT_API_URL =
   "https://raymondmak-app1.expo.app/api/context";
@@ -138,7 +140,7 @@ export async function fetchClinicalContext(
     console.log(`[contextApi] POST ${url} queryChars=${trimmed.length}`);
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: mindLinkApiHeaders(),
       body: JSON.stringify({ query: trimmed }),
       signal: controller?.signal,
     });

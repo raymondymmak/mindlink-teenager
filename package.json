@@ -18,7 +18,10 @@
     "test:gemini-client": "node scripts/test-gemini-client.mjs",
     "test:gemini-generate": "node scripts/test-gemini-generate.mjs",
     "test:gemini-api": "node scripts/test-gemini-api.mjs",
+    "test:api-guard": "node scripts/test-api-guard.mjs",
+    "test:api-auth": "node scripts/test-api-auth.mjs",
     "test:context-api": "node scripts/test-context-api.mjs",
+    "test:context-route": "node scripts/test-context-route.mjs",
     "test:retrieve-context": "node scripts/test-retrieve-context.mjs",
     "test:web-viewport": "node scripts/test-web-viewport.js"
   },

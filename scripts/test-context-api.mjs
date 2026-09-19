@@ -1,4 +1,5 @@
 import assert from "assert";
+import { DEFAULT_MINDLINK_API_TOKEN } from "../utils/apiAuth.js";
 import {
   DEFAULT_CONTEXT_API_URL,
   appendContextToInstruction,
@@ -90,6 +91,11 @@ assert.strictEqual(calls[0].options.method, "POST");
 const body = JSON.parse(calls[0].options.body);
 assert.deepStrictEqual(Object.keys(body), ["query"]);
 assert.strictEqual(body.query, "exam anxiety sleep");
+assert.strictEqual(
+  calls[0].options.headers.Authorization,
+  `Bearer ${process.env.EXPO_PUBLIC_MINDLINK_API_TOKEN || DEFAULT_MINDLINK_API_TOKEN}`
+);
+assert.ok(calls[0].options.headers["X-MindLink-Token"]);
 assert.ok(!JSON.stringify(calls[0]).includes("PINECONE"));
 
 globalThis.fetch = async () => {

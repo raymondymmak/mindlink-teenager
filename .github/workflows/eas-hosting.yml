@@ -1,6 +1,6 @@
 # EAS Hosting: PRs (and manual runs) → staging alias; push to main → production.
 # Requires GitHub Actions secret EXPO_TOKEN (Expo account access token).
-# Server keys GEMINI_KEY / PINECONE_KEY live on EAS preview + production, not here.
+# Server keys GEMINI_KEY / PINECONE_KEY / MINDLINK_API_TOKEN live on EAS preview + production, not here.
 
 name: EAS Hosting
 

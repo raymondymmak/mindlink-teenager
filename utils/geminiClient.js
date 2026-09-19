@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { mindLinkApiHeaders } from "./apiAuth.js";
 
 export const SAME_ORIGIN_GEMINI_PATH = "/api/gemini";
 export const PRODUCTION_GEMINI_API_URL =
@@ -80,7 +81,7 @@ async function probeGeminiHealth() {
   const url = getGeminiApiUrl();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: mindLinkApiHeaders(),
     body: JSON.stringify({ health: true }),
   });
   const data = await response.json().catch(() => ({}));
@@ -151,7 +152,7 @@ export async function generateGeminiText({
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: mindLinkApiHeaders(),
       body: JSON.stringify({
         contents,
         systemInstruction,
