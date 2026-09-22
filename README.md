@@ -71,7 +71,7 @@ POST /api/gemini { "health": true } → { "configured": true|false }
 POST /api/gemini { "contents", "systemInstruction", "task": "chat"|"brief" } → { "text" }
 ```
 
-Both `/api/gemini` and `/api/context` require `Authorization: Bearer <MINDLINK_API_TOKEN>` or `X-MindLink-Token`. The Expo client sends `EXPO_PUBLIC_MINDLINK_API_TOKEN` (a public *gate*, default `mindlink-demo-gate-v1` — not `GEMINI_KEY`). Missing/wrong token → **401**. More than **30 requests / 10 min / IP** or **120 / 10 min / token** → **429**.
+Both `/api/gemini` and `/api/context` require `Authorization: Bearer <MINDLINK_API_TOKEN>` or `X-MindLink-Token`. The Expo client sends `EXPO_PUBLIC_MINDLINK_API_TOKEN` (a public *gate*, default `mindlink-demo-gate-v1` — not `GEMINI_KEY`). Missing/wrong token → **401**. More than **30 requests / 10 min / IP** or **120 / 10 min / token** → **429**. The counter is shared across EAS Hosting isolates (Workers Cache API, plus a `/tmp` file and in-memory fallback), not only inside one process.
 
 EAS Hosting serves the SPA HTML for `GET /api/*`, so configured-ness is a POST like generate. `GET /api/gemini` still works in local Metro.
 

@@ -1,12 +1,15 @@
 import { evaluateApiGuard, guardJsonResponse } from "../../server/apiGuard.js";
 import { retrieveClinicalContext } from "../../server/retrieveContext.js";
 
-function json(body, status = 200) {
-  return Response.json(body, { status });
+function json(body, status = 200, headers = {}) {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", ...headers },
+  });
 }
 
-function deny(request) {
-  const guard = evaluateApiGuard(request);
+async function deny(request) {
+  const guard = await evaluateApiGuard(request);
   if (!guard.ok) {
     return guardJsonResponse(guard, { context: "", matches: [] });
   }
@@ -21,7 +24,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const blocked = deny(request);
+  const blocked = await deny(request);
   if (blocked) return blocked;
 
   let body = {};

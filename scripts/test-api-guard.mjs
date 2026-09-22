@@ -4,6 +4,7 @@ import {
   DEFAULT_RATE_LIMIT_IP_MAX,
   DEFAULT_RATE_LIMIT_TOKEN_MAX,
   DEFAULT_RATE_LIMIT_WINDOW_MS,
+  clearMemoryBucketsForTests,
   evaluateApiGuard,
   extractApiToken,
   getClientIp,
@@ -45,6 +46,14 @@ const ipRequest = new Request("http://localhost/api/gemini", {
 });
 assert.strictEqual(getClientIp(ipRequest), "203.0.113.9");
 
+const cloudflareIp = new Request("http://localhost/api/gemini", {
+  headers: {
+    "cf-connecting-ip": "203.0.113.8",
+    "x-forwarded-for": "198.51.100.1",
+  },
+});
+assert.strictEqual(getClientIp(cloudflareIp), "203.0.113.8");
+
 process.env.MINDLINK_RATE_LIMIT_IP_MAX = "3";
 process.env.MINDLINK_RATE_LIMIT_TOKEN_MAX = "10";
 process.env.MINDLINK_RATE_LIMIT_WINDOW_MS = "600000";
@@ -55,7 +64,7 @@ assert.deepStrictEqual(getRateLimitConfig(), {
 });
 
 resetApiGuardState();
-const unauth = evaluateApiGuard(
+const unauth = await evaluateApiGuard(
   new Request("http://localhost/api/gemini", {
     method: "POST",
     headers: { "x-forwarded-for": "198.51.100.2" },
@@ -64,6 +73,7 @@ const unauth = evaluateApiGuard(
 assert.strictEqual(unauth.ok, false);
 assert.strictEqual(unauth.status, 401);
 assert.strictEqual(unauth.body.code, "UNAUTHORIZED");
+assert.strictEqual(unauth.headers["Cache-Control"], "no-store");
 
 const authedInit = {
   method: "POST",
@@ -72,15 +82,16 @@ const authedInit = {
     "x-forwarded-for": "198.51.100.3",
   },
 };
-assert.strictEqual(evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit)).ok, true);
-assert.strictEqual(evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit)).ok, true);
-assert.strictEqual(evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit)).ok, true);
-const fourth = evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit));
+assert.strictEqual((await evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit))).ok, true);
+assert.strictEqual((await evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit))).ok, true);
+assert.strictEqual((await evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit))).ok, true);
+const fourth = await evaluateApiGuard(new Request("http://localhost/api/gemini", authedInit));
 assert.strictEqual(fourth.ok, false);
 assert.strictEqual(fourth.status, 429);
 assert.strictEqual(fourth.body.code, "RATE_LIMITED");
 assert.ok(fourth.body.retryAfter >= 1);
 assert.strictEqual(fourth.headers["Retry-After"], String(fourth.body.retryAfter));
+assert.strictEqual(fourth.headers["Cache-Control"], "no-store");
 
 resetApiGuardState();
 process.env.MINDLINK_RATE_LIMIT_IP_MAX = "50";
@@ -92,13 +103,75 @@ const tokenInit = {
     "x-forwarded-for": "203.0.113.10",
   },
 };
-assert.strictEqual(evaluateApiGuard(new Request("http://localhost/api/context", tokenInit)).ok, true);
-assert.strictEqual(evaluateApiGuard(new Request("http://localhost/api/context", tokenInit)).ok, true);
-const tokenLimited = evaluateApiGuard(
+assert.strictEqual((await evaluateApiGuard(new Request("http://localhost/api/context", tokenInit))).ok, true);
+assert.strictEqual((await evaluateApiGuard(new Request("http://localhost/api/context", tokenInit))).ok, true);
+const tokenLimited = await evaluateApiGuard(
   new Request("http://localhost/api/context", tokenInit)
 );
 assert.strictEqual(tokenLimited.status, 429);
 assert.strictEqual(tokenLimited.body.limit, 2);
+
+resetApiGuardState();
+process.env.MINDLINK_RATE_LIMIT_IP_MAX = "2";
+process.env.MINDLINK_RATE_LIMIT_TOKEN_MAX = "20";
+const durableInit = {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer custom-gate",
+    "x-forwarded-for": "192.0.2.40",
+  },
+};
+assert.strictEqual(
+  (await evaluateApiGuard(new Request("http://localhost/api/gemini", durableInit))).ok,
+  true
+);
+clearMemoryBucketsForTests();
+assert.strictEqual(
+  (await evaluateApiGuard(new Request("http://localhost/api/gemini", durableInit))).ok,
+  true
+);
+clearMemoryBucketsForTests();
+const durableLimited = await evaluateApiGuard(
+  new Request("http://localhost/api/gemini", durableInit)
+);
+assert.strictEqual(durableLimited.status, 429);
+assert.strictEqual(durableLimited.headers["X-RateLimit-Source"], "file");
+assert.ok(durableLimited.headers["X-RateLimit-Persist"].includes("file"));
+
+resetApiGuardState();
+const cacheStore = new Map();
+globalThis.caches = {
+  default: {
+    async match(request) {
+      const hit = cacheStore.get(request.url);
+      return hit ? new Response(hit) : undefined;
+    },
+    async put(request, response) {
+      cacheStore.set(request.url, await response.text());
+    },
+  },
+};
+process.env.MINDLINK_RATE_LIMIT_IP_MAX = "1";
+process.env.MINDLINK_RATE_LIMIT_TOKEN_MAX = "20";
+const cacheInit = {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer custom-gate",
+    "x-forwarded-for": "192.0.2.41",
+  },
+};
+assert.strictEqual(
+  (await evaluateApiGuard(new Request("http://localhost/api/gemini", cacheInit))).ok,
+  true
+);
+resetApiGuardState();
+const fromCache = await evaluateApiGuard(
+  new Request("http://localhost/api/gemini", cacheInit)
+);
+assert.strictEqual(fromCache.status, 429);
+assert.strictEqual(fromCache.headers["X-RateLimit-Source"], "cache");
+assert.ok(fromCache.headers["X-RateLimit-Persist"].includes("cache"));
+delete globalThis.caches;
 
 if (originalToken === undefined) delete process.env.MINDLINK_API_TOKEN;
 else process.env.MINDLINK_API_TOKEN = originalToken;
