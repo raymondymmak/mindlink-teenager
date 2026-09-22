@@ -4,14 +4,12 @@ import {
   DEFAULT_RATE_LIMIT_IP_MAX,
   DEFAULT_RATE_LIMIT_TOKEN_MAX,
   DEFAULT_RATE_LIMIT_WINDOW_MS,
-  claimRateSlot,
   clearMemoryBucketsForTests,
   evaluateApiGuard,
   extractApiToken,
   getClientIp,
   getExpectedApiToken,
   getRateLimitConfig,
-  isEdgeCacheHit,
   resetApiGuardState,
   tokensMatch,
 } from "../server/apiGuard.js";
@@ -177,83 +175,25 @@ assert.strictEqual(fromCache.headers["X-RateLimit-Source"], "cache");
 assert.ok(fromCache.headers["X-RateLimit-Persist"].includes("cache"));
 delete globalThis.caches;
 
-assert.strictEqual(isEdgeCacheHit("EAS; fwd=miss"), false);
-assert.strictEqual(isEdgeCacheHit("EAS; fwd=hit"), true);
-assert.strictEqual(isEdgeCacheHit(""), false);
-
-const slotCalls = [];
-const slotResult = await claimRateSlot({
-  origin: "https://example.test",
-  scope: "ip:abc",
-  max: 3,
-  windowMs: 600000,
-  now: 1_700_000_000_000,
-  fetchImpl: async (url, init) => {
-    slotCalls.push(init.body);
-    const slot = JSON.parse(init.body).slot;
-    const hit = slot === 0;
-    return {
-      headers: {
-        get(name) {
-          if (String(name).toLowerCase() === "cache-status") {
-            return hit ? "EAS; fwd=hit" : "EAS; fwd=miss";
-          }
-          return null;
-        },
-      },
-      async arrayBuffer() {
-        return new ArrayBuffer(0);
-      },
-    };
-  },
-});
-assert.strictEqual(slotCalls.length, 2);
-assert.strictEqual(slotResult.limited, false);
-assert.strictEqual(slotResult.slot, 1);
-assert.strictEqual(slotResult.remaining, 1);
-assert.strictEqual(slotResult.source, "edge");
-
-const exhausted = await claimRateSlot({
-  origin: "https://example.test",
-  scope: "ip:abc",
-  max: 2,
-  windowMs: 600000,
-  now: 1_700_000_000_000,
-  fetchImpl: async () => ({
-    headers: { get: () => "EAS; fwd=hit" },
-    async arrayBuffer() {
-      return new ArrayBuffer(0);
-    },
-  }),
-});
-assert.strictEqual(exhausted.limited, true);
-assert.strictEqual(exhausted.remaining, 0);
-assert.ok(exhausted.retryAfter >= 1);
-
 resetApiGuardState();
 process.env.MINDLINK_RATE_LIMIT_IP_MAX = "2";
 process.env.MINDLINK_RATE_LIMIT_TOKEN_MAX = "20";
-const originalFetch = globalThis.fetch;
-const slotScopes = [];
-globalThis.fetch = async (_url, init) => {
-  slotScopes.push(JSON.parse(init.body).scope);
-  return {
-    headers: { get: () => "EAS; fwd=hit" },
-    async arrayBuffer() {
-      return new ArrayBuffer(0);
-    },
-  };
-};
-const sharedLimited = await evaluateApiGuard(
-  new Request("https://example.test/api/gemini", {
-    method: "POST",
-    headers: { "x-forwarded-for": "203.0.113.50" },
-  })
-);
-assert.strictEqual(sharedLimited.status, 429);
-assert.strictEqual(sharedLimited.body.code, "RATE_LIMITED");
-assert.ok(slotScopes.includes("unauth:shared"));
-globalThis.fetch = originalFetch;
+const rotating = [];
+for (const ip of ["203.0.113.61", "203.0.113.62", "203.0.113.63"]) {
+  rotating.push(
+    await evaluateApiGuard(
+      new Request("http://localhost/api/gemini", {
+        method: "POST",
+        headers: { "x-forwarded-for": ip },
+      })
+    )
+  );
+}
+assert.strictEqual(rotating[0].status, 401);
+assert.strictEqual(rotating[1].status, 401);
+assert.strictEqual(rotating[2].status, 429);
+assert.strictEqual(rotating[2].body.code, "RATE_LIMITED");
+assert.strictEqual(rotating[2].body.limit, 2);
 
 if (originalToken === undefined) delete process.env.MINDLINK_API_TOKEN;
 else process.env.MINDLINK_API_TOKEN = originalToken;

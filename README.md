@@ -71,7 +71,7 @@ POST /api/gemini { "health": true } → { "configured": true|false }
 POST /api/gemini { "contents", "systemInstruction", "task": "chat"|"brief" } → { "text" }
 ```
 
-Both `/api/gemini` and `/api/context` require `Authorization: Bearer <MINDLINK_API_TOKEN>` or `X-MindLink-Token`. The Expo client sends `EXPO_PUBLIC_MINDLINK_API_TOKEN` (a public *gate*, default `mindlink-demo-gate-v1` — not `GEMINI_KEY`). Missing/wrong token → **401**. More than **30 unauthenticated requests / 10 min** (one deployment-wide bucket on EAS Hosting, which does not expose a stable client IP; per IP when `CF-Connecting-IP` is present) or **120 authenticated requests / 10 min / token** → **429**. The counter is shared across isolates by claiming cached `/api/ratelimit` slots.
+Both `/api/gemini` and `/api/context` require `Authorization: Bearer <MINDLINK_API_TOKEN>` or `X-MindLink-Token`. The Expo client sends `EXPO_PUBLIC_MINDLINK_API_TOKEN` (a public *gate*, default `mindlink-demo-gate-v1` — not `GEMINI_KEY`). Missing/wrong token → **401**. More than **30 unauthenticated requests / 10 min** (one deployment-wide bucket on EAS Hosting, which does not expose a stable client IP; per IP when `CF-Connecting-IP` is present) or **120 authenticated requests / 10 min / token** → **429**. The counter is a named Workers cache shared across isolates (`caches.default` is not available on EAS Hosting).
 
 EAS Hosting serves the SPA HTML for `GET /api/*`, so configured-ness is a POST like generate. `GET /api/gemini` still works in local Metro.
 

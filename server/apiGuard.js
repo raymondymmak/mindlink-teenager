@@ -4,8 +4,9 @@
  *
  * EAS Hosting runs each request in a Cloudflare Worker isolate and may
  * re-evaluate route modules, so a module-level Map never reaches 429.
- * Counters are stored on globalThis, in /tmp (same isolate), and in the
- * Workers Cache API (shared in a region). The highest count wins.
+ * Counters are stored on globalThis, in /tmp (same isolate), and in a named
+ * Workers cache (caches.open). caches.default is forbidden on EAS.
+ * The highest count wins.
  */
 
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -109,109 +110,6 @@ export function readClientIp(request) {
 
 export function getClientIp(request) {
   return readClientIp(request).ip;
-}
-
-export function isEdgeCacheHit(cacheStatus) {
-  const value = String(cacheStatus || "").toLowerCase();
-  if (!value || value.includes("miss") || value.includes("expired") || value.includes("bypass")) {
-    return false;
-  }
-  return /\bhit\b/.test(value);
-}
-
-/**
- * Claim one cached POST slot on the EAS CDN.
- * EAS Hosting workers cannot use caches.default. The CDN still caches
- * public POST responses, and that cache is shared across isolates.
- * A miss claims the slot; a hit means another request already took it.
- */
-export async function claimRateSlot({
-  origin,
-  scope,
-  max,
-  windowMs,
-  fetchImpl = fetch,
-  now = Date.now(),
-}) {
-  const windowId = Math.floor(now / windowMs);
-  const maxAge = Math.max(1, Math.min(3600, Math.ceil(windowMs / 1000)));
-  const safeScope = String(scope || "")
-    .replace(/[^a-zA-Z0-9:_-]/g, "")
-    .slice(0, 80);
-  if (!origin || !safeScope || !max) {
-    return null;
-  }
-
-  let lastStatus = "";
-  for (let slot = 0; slot < max; slot += 1) {
-    const body = `{"scope":"${safeScope}","windowId":${windowId},"slot":${slot},"maxAge":${maxAge}}`;
-    let response;
-    try {
-      response = await fetchImpl(`${origin}/api/ratelimit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        signal:
-          typeof AbortSignal !== "undefined" && AbortSignal.timeout
-            ? AbortSignal.timeout(2500)
-            : undefined,
-      });
-    } catch (error) {
-      return {
-        limited: false,
-        failed: true,
-        remaining: Math.max(0, max - 1),
-        limit: max,
-        cacheStatus: `error:${safeError(error)}`,
-        slot: 0,
-        source: "edge-error",
-        retryAfter: 1,
-      };
-    }
-
-    const cacheStatus = [
-      response.headers?.get?.("cache-status"),
-      response.headers?.get?.("cf-cache-status"),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .slice(0, 80);
-    lastStatus = cacheStatus;
-    if (typeof response.arrayBuffer === "function") {
-      await response.arrayBuffer().catch(() => {});
-    } else if (typeof response.text === "function") {
-      await response.text().catch(() => {});
-    }
-
-    if (!isEdgeCacheHit(cacheStatus)) {
-      const retryAfter = Math.max(
-        1,
-        Math.ceil((windowMs - (now % windowMs)) / 1000)
-      );
-      return {
-        limited: false,
-        failed: false,
-        remaining: Math.max(0, max - slot - 1),
-        limit: max,
-        cacheStatus: cacheStatus || "miss",
-        slot,
-        source: slot > 0 ? "edge" : "edge-miss",
-        retryAfter,
-      };
-    }
-  }
-
-  const retryAfter = Math.max(1, Math.ceil((windowMs - (now % windowMs)) / 1000));
-  return {
-    limited: true,
-    failed: false,
-    remaining: 0,
-    limit: max,
-    cacheStatus: lastStatus || "hit",
-    slot: max,
-    source: "edge",
-    retryAfter,
-  };
 }
 
 function safeError(error) {
@@ -412,67 +310,27 @@ function unauthorizedResult(limitInfo, via) {
 }
 
 /**
- * Auth + rate limit. Failed auth still consumes the IP bucket.
+ * Auth + rate limit. Failed auth still consumes a bucket.
+ * EAS Hosting does not set CF-Connecting-IP, and X-Forwarded-For is one
+ * rotating hop, so unauthenticated calls share one bucket. A real per-IP
+ * bucket is used when CF-Connecting-IP or a multi-hop X-Forwarded-For exists.
  * @returns {Promise<{ ok: true } | { ok: false, status: number, headers?: object, body: object }>}
  */
-function publicHttpsOrigin(request) {
-  try {
-    const url = new URL(request?.url || "");
-    if (url.protocol !== "https:") return "";
-    return url.origin;
-  } catch {
-    return "";
-  }
-}
-
-// EAS Hosting does not set CF-Connecting-IP. X-Forwarded-For arrives as one
-// rotating hop, so it is not a client identity. A real client IP is present
-// when Cloudflare sets CF-Connecting-IP or a proxy appended a second hop.
 function clientIpIsStable(ipInfo) {
   if (ipInfo.via === "cf") return true;
   return ipInfo.via === "xff" && ipInfo.hops >= 2;
-}
-
-async function applyEdgeSlots(limitInfo, { origin, scope, max, windowMs }) {
-  if (!origin) return limitInfo;
-  try {
-    const slot = await claimRateSlot({ origin, scope, max, windowMs });
-    if (!slot || slot.failed) {
-      return {
-        ...limitInfo,
-        cache: slot?.cacheStatus || limitInfo.cache,
-      };
-    }
-    return {
-      ...limitInfo,
-      limited: limitInfo.limited || slot.limited,
-      remaining: slot.limited ? 0 : slot.remaining,
-      retryAfter: slot.limited ? slot.retryAfter : limitInfo.retryAfter,
-      source: slot.slot > 0 || slot.limited ? "edge" : limitInfo.source,
-      persist: `${limitInfo.persist},edge`,
-      cache: `slot:${slot.slot}:${slot.cacheStatus}`,
-    };
-  } catch (error) {
-    return { ...limitInfo, cache: `slot-error:${safeError(error)}` };
-  }
 }
 
 export async function evaluateApiGuard(request) {
   const { windowMs, ipMax, tokenMax } = getRateLimitConfig();
   const ipInfo = readClientIp(request);
   const via = `${ipInfo.via};hops=${ipInfo.hops}`;
-  const origin = publicHttpsOrigin(request);
   const stableIp = clientIpIsStable(ipInfo);
-  const ipKey = `ip:${digestToken(ipInfo.ip)}`;
-  let ipLimit = await consumeRateLimit(ipKey, ipMax, windowMs);
-  if (!ipLimit.limited && stableIp) {
-    ipLimit = await applyEdgeSlots(ipLimit, {
-      origin,
-      scope: ipKey,
-      max: ipMax,
-      windowMs,
-    });
-  }
+  const ipLimit = await consumeRateLimit(
+    `ip:${digestToken(ipInfo.ip)}`,
+    ipMax,
+    windowMs
+  );
   if (ipLimit.limited) {
     return rateLimitResult(ipLimit, via);
   }
@@ -480,37 +338,21 @@ export async function evaluateApiGuard(request) {
   const provided = extractApiToken(request);
   const expected = getExpectedApiToken();
   if (!provided || !tokensMatch(provided, expected)) {
-    if (!stableIp) {
-      let shared = await consumeRateLimit("unauth:shared", ipMax, windowMs);
-      if (!shared.limited) {
-        shared = await applyEdgeSlots(shared, {
-          origin,
-          scope: "unauth:shared",
-          max: ipMax,
-          windowMs,
-        });
-      }
-      if (shared.limited) {
-        return rateLimitResult(shared, via);
-      }
-      return unauthorizedResult(shared, via);
+    if (stableIp) {
+      return unauthorizedResult(ipLimit, via);
     }
-    return unauthorizedResult(ipLimit, via);
+    const shared = await consumeRateLimit("unauth:shared", ipMax, windowMs);
+    if (shared.limited) {
+      return rateLimitResult(shared, via);
+    }
+    return unauthorizedResult(shared, via);
   }
 
-  let tokenLimit = await consumeRateLimit(
+  const tokenLimit = await consumeRateLimit(
     `token:${digestToken(provided)}`,
     tokenMax,
     windowMs
   );
-  if (!tokenLimit.limited) {
-    tokenLimit = await applyEdgeSlots(tokenLimit, {
-      origin,
-      scope: `token:${digestToken(provided)}`,
-      max: tokenMax,
-      windowMs,
-    });
-  }
   if (tokenLimit.limited) {
     return rateLimitResult(tokenLimit, via);
   }
