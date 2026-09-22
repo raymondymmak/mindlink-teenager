@@ -47,8 +47,24 @@ Use **sensitive** visibility, not `secret` (EAS Hosting cannot deploy `secret` v
 | --- | --- | --- |
 | `GEMINI_KEY` | **preview** and **production** | Server-only. Used by `POST /api/gemini`. |
 | `PINECONE_KEY` | **preview** and **production** | Server-only. Used by `POST /api/context`. |
+| `MINDLINK_API_TOKEN` | **preview** and **production** | Server-only request *gate* for `/api/gemini` and `/api/context`. Must match the client `EXPO_PUBLIC_MINDLINK_API_TOKEN` (committed default: `mindlink-demo-gate-v1`). This is **not** a Gemini/Pinecone capability secret. |
 
 `EXPO_PUBLIC_GEMINI_MODEL=auto` is not a secret and may be present. Do not set `EXPO_PUBLIC_GEMINI_API_KEY`.
+
+`EXPO_PUBLIC_MINDLINK_API_TOKEN` is a **public gate** baked into the web JS so the Expo SPA/native demo can call same-origin APIs. HttpOnly cookies are not used: EAS Hosting API routes have no session store, Origin is spoofable with curl, and the native demo is not same-origin. Anyone who reads the bundle can send the gate token — **rate limits** stop quota burn:
+
+| Scope | Default | Window |
+| --- | --- | --- |
+| Per client IP | **30** | **10 minutes** |
+| Per token | **120** | **10 minutes** |
+
+Unauthenticated or wrong-token POSTs return **401** `{ code: "UNAUTHORIZED" }`. Abusive calls return **429** `{ code: "RATE_LIMITED", retryAfter }` with `Retry-After`. Health (`POST /api/gemini` `{ "health": true }` and local `GET /api/gemini`) is gated the same way.
+
+Counters are not process-local. EAS Hosting rejects `caches.default` (Workers for Platforms) and may re-evaluate route modules, so a module-level `Map` never reaches 429. Counts are stored with `caches.open` (named cache), plus `globalThis` and a `/tmp` file. The highest count wins. API denials send `Cache-Control: no-store`.
+
+EAS does not set `CF-Connecting-IP`, and `X-Forwarded-For` arrives as a single rotating hop, so that value is not a client identity. Unauthenticated calls therefore share one bucket of **30 / 10 minutes**. Authenticated calls are limited per token at **120 / 10 minutes** and do not consume the unauthenticated bucket. When `CF-Connecting-IP` or a multi-hop `X-Forwarded-For` is present, the 30 limit is per client IP instead.
+
+To rotate the gate: set a new random value on EAS `MINDLINK_API_TOKEN` (preview + production) **and** change `EXPO_PUBLIC_MINDLINK_API_TOKEN` in `.env.development` (CI `expo export` inlines that file). They must match or the demo gets 401.
 
 If preview/production vars are missing, staging/prod deploys still go out but chat/RAG run in demo mode.
 

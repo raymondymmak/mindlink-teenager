@@ -1,3 +1,4 @@
+import { evaluateApiGuard, guardJsonResponse } from "../../server/apiGuard.js";
 import {
   generateGeminiText,
   isServerGeminiConfigured,
@@ -5,8 +6,11 @@ import {
   resolveGeminiModel,
 } from "../../server/geminiGenerate.js";
 
-function json(body, status = 200) {
-  return Response.json(body, { status });
+function json(body, status = 200, headers = {}) {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", ...headers },
+  });
 }
 
 function healthPayload() {
@@ -17,11 +21,24 @@ function healthPayload() {
   };
 }
 
-export async function GET() {
+async function deny(request) {
+  const guard = await evaluateApiGuard(request);
+  if (!guard.ok) {
+    return guardJsonResponse(guard);
+  }
+  return null;
+}
+
+export async function GET(request) {
+  const blocked = await deny(request);
+  if (blocked) return blocked;
   return json(healthPayload());
 }
 
 export async function POST(request) {
+  const blocked = await deny(request);
+  if (blocked) return blocked;
+
   let raw = "";
   try {
     raw = await request.text();

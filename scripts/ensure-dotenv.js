@@ -25,6 +25,8 @@ const METRO_ENV_FILES = [
 const STUB = `# Generated for Metro expo/virtual/env.js (dev-only).
 # Copy .env.example to .env for a local Gemini key. Never put secrets in git.
 EXPO_PUBLIC_GEMINI_MODEL=auto
+EXPO_PUBLIC_MINDLINK_API_TOKEN=mindlink-demo-gate-v1
+MINDLINK_API_TOKEN=mindlink-demo-gate-v1
 `;
 
 function metroEnvPaths(rootDir) {

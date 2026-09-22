@@ -15,6 +15,14 @@ export function getServerPineconeKey() {
   ).trim();
 }
 
+/**
+ * Server-side API gate. Prefer MINDLINK_API_TOKEN on EAS (preview + production).
+ * This is a request gate, not a Gemini/Pinecone capability secret.
+ */
+export function getServerApiToken() {
+  return (process.env.MINDLINK_API_TOKEN || "").trim();
+}
+
 export function isServerGeminiConfigured() {
   return Boolean(getServerGeminiKey());
 }
