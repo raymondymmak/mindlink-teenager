@@ -90,20 +90,128 @@ export function extractApiToken(request) {
   return bearer?.[1]?.trim() || "";
 }
 
-export function getClientIp(request) {
+export function readClientIp(request) {
   const cloudflare = String(
     request?.headers?.get("cf-connecting-ip") || ""
   ).trim();
-  if (cloudflare) return cloudflare;
-
-  const forwarded = String(request?.headers?.get("x-forwarded-for") || "")
-    .split(",")[0]
-    .trim();
-  if (forwarded) return forwarded;
-
+  const hops = String(request?.headers?.get("x-forwarded-for") || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   const realIp = String(request?.headers?.get("x-real-ip") || "").trim();
-  if (realIp) return realIp;
-  return "unknown";
+  if (cloudflare) return { ip: cloudflare, via: "cf", hops: hops.length };
+  if (hops.length) {
+    return { ip: hops[hops.length - 1], via: "xff", hops: hops.length };
+  }
+  if (realIp) return { ip: realIp, via: "real", hops: 0 };
+  return { ip: "unknown", via: "unknown", hops: 0 };
+}
+
+export function getClientIp(request) {
+  return readClientIp(request).ip;
+}
+
+export function isEdgeCacheHit(cacheStatus) {
+  const value = String(cacheStatus || "").toLowerCase();
+  if (!value || value.includes("miss") || value.includes("expired") || value.includes("bypass")) {
+    return false;
+  }
+  return /\bhit\b/.test(value);
+}
+
+/**
+ * Claim one cached POST slot on the EAS CDN.
+ * EAS Hosting workers cannot use caches.default. The CDN still caches
+ * public POST responses, and that cache is shared across isolates.
+ * A miss claims the slot; a hit means another request already took it.
+ */
+export async function claimRateSlot({
+  origin,
+  scope,
+  max,
+  windowMs,
+  fetchImpl = fetch,
+  now = Date.now(),
+}) {
+  const windowId = Math.floor(now / windowMs);
+  const maxAge = Math.max(1, Math.min(3600, Math.ceil(windowMs / 1000)));
+  const safeScope = String(scope || "")
+    .replace(/[^a-zA-Z0-9:_-]/g, "")
+    .slice(0, 80);
+  if (!origin || !safeScope || !max) {
+    return null;
+  }
+
+  let lastStatus = "";
+  for (let slot = 0; slot < max; slot += 1) {
+    const body = `{"scope":"${safeScope}","windowId":${windowId},"slot":${slot},"maxAge":${maxAge}}`;
+    let response;
+    try {
+      response = await fetchImpl(`${origin}/api/ratelimit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal:
+          typeof AbortSignal !== "undefined" && AbortSignal.timeout
+            ? AbortSignal.timeout(2500)
+            : undefined,
+      });
+    } catch (error) {
+      return {
+        limited: false,
+        failed: true,
+        remaining: Math.max(0, max - 1),
+        limit: max,
+        cacheStatus: `error:${safeError(error)}`,
+        slot: 0,
+        source: "edge-error",
+        retryAfter: 1,
+      };
+    }
+
+    const cacheStatus = [
+      response.headers?.get?.("cache-status"),
+      response.headers?.get?.("cf-cache-status"),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .slice(0, 80);
+    lastStatus = cacheStatus;
+    if (typeof response.arrayBuffer === "function") {
+      await response.arrayBuffer().catch(() => {});
+    } else if (typeof response.text === "function") {
+      await response.text().catch(() => {});
+    }
+
+    if (!isEdgeCacheHit(cacheStatus)) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((windowMs - (now % windowMs)) / 1000)
+      );
+      return {
+        limited: false,
+        failed: false,
+        remaining: Math.max(0, max - slot - 1),
+        limit: max,
+        cacheStatus: cacheStatus || "miss",
+        slot,
+        source: slot > 0 ? "edge" : "edge-miss",
+        retryAfter,
+      };
+    }
+  }
+
+  const retryAfter = Math.max(1, Math.ceil((windowMs - (now % windowMs)) / 1000));
+  return {
+    limited: true,
+    failed: false,
+    remaining: 0,
+    limit: max,
+    cacheStatus: lastStatus || "hit",
+    slot: max,
+    source: "edge",
+    retryAfter,
+  };
 }
 
 function safeError(error) {
@@ -153,16 +261,23 @@ function writeFileStore(data) {
 }
 
 async function openCache() {
+  if (globalThis.__mindlinkCacheOff) {
+    return { cache: null, status: "disabled" };
+  }
   const cachesApi = globalThis.caches;
-  if (!cachesApi) return { cache: null, status: "missing" };
-  try {
-    if (cachesApi.default) return { cache: cachesApi.default, status: "ok" };
-    if (typeof cachesApi.open === "function") {
-      return { cache: await cachesApi.open(CACHE_NAME), status: "ok" };
-    }
+  if (!cachesApi || typeof cachesApi.open !== "function") {
     return { cache: null, status: "missing" };
+  }
+  try {
+    const cache = await cachesApi.open(CACHE_NAME);
+    if (!cache) return { cache: null, status: "missing" };
+    return { cache, status: "ok" };
   } catch (error) {
-    return { cache: null, status: `failed:${safeError(error)}` };
+    const status = `failed:${safeError(error)}`;
+    if (status.toLowerCase().includes("not permitted")) {
+      globalThis.__mindlinkCacheOff = true;
+    }
+    return { cache: null, status };
   }
 }
 
@@ -255,24 +370,24 @@ async function consumeRateLimit(key, max, windowMs) {
   };
 }
 
-function rateHeaders(limitInfo, scope) {
+function rateHeaders(limitInfo, via) {
   return {
     "Cache-Control": "no-store",
     "X-RateLimit-Limit": String(limitInfo.limit),
     "X-RateLimit-Remaining": String(limitInfo.remaining),
     "X-RateLimit-Source": limitInfo.source || "none",
     "X-RateLimit-Persist": limitInfo.persist || "memory",
-    "X-RateLimit-Cache": limitInfo.cache || "missing",
-    "X-RateLimit-Scope": scope,
+    "X-RateLimit-Cache": String(limitInfo.cache || "missing").slice(0, 120),
+    "X-RateLimit-Via": via || "unknown",
   };
 }
 
-function rateLimitResult(limitInfo, scope) {
+function rateLimitResult(limitInfo, via) {
   return {
     ok: false,
     status: 429,
     headers: {
-      ...rateHeaders(limitInfo, scope),
+      ...rateHeaders(limitInfo, via),
       "Retry-After": String(limitInfo.retryAfter),
     },
     body: {
@@ -284,11 +399,11 @@ function rateLimitResult(limitInfo, scope) {
   };
 }
 
-function unauthorizedResult(limitInfo, scope) {
+function unauthorizedResult(limitInfo, via) {
   return {
     ok: false,
     status: 401,
-    headers: rateHeaders(limitInfo, scope),
+    headers: rateHeaders(limitInfo, via),
     body: {
       error: "Missing or invalid API token",
       code: "UNAUTHORIZED",
@@ -300,29 +415,80 @@ function unauthorizedResult(limitInfo, scope) {
  * Auth + rate limit. Failed auth still consumes the IP bucket.
  * @returns {Promise<{ ok: true } | { ok: false, status: number, headers?: object, body: object }>}
  */
+function publicHttpsOrigin(request) {
+  try {
+    const url = new URL(request?.url || "");
+    if (url.protocol !== "https:") return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+async function applyEdgeSlots(limitInfo, { origin, scope, max, windowMs }) {
+  if (!origin) return limitInfo;
+  try {
+    const slot = await claimRateSlot({ origin, scope, max, windowMs });
+    if (!slot || slot.failed) {
+      return {
+        ...limitInfo,
+        cache: slot?.cacheStatus || limitInfo.cache,
+      };
+    }
+    return {
+      ...limitInfo,
+      limited: limitInfo.limited || slot.limited,
+      remaining: slot.limited ? 0 : slot.remaining,
+      retryAfter: slot.limited ? slot.retryAfter : limitInfo.retryAfter,
+      source: slot.slot > 0 || slot.limited ? "edge" : limitInfo.source,
+      persist: `${limitInfo.persist},edge`,
+      cache: `slot:${slot.slot}:${slot.cacheStatus}`,
+    };
+  } catch (error) {
+    return { ...limitInfo, cache: `slot-error:${safeError(error)}` };
+  }
+}
+
 export async function evaluateApiGuard(request) {
   const { windowMs, ipMax, tokenMax } = getRateLimitConfig();
-  const ip = getClientIp(request);
-  const scope = digestToken(ip).slice(0, 8);
-  const ipKey = `ip:${digestToken(ip)}`;
-  const ipLimit = await consumeRateLimit(ipKey, ipMax, windowMs);
+  const ipInfo = readClientIp(request);
+  const via = `${ipInfo.via};hops=${ipInfo.hops}`;
+  const origin = publicHttpsOrigin(request);
+  const ipKey = `ip:${digestToken(ipInfo.ip)}`;
+  let ipLimit = await consumeRateLimit(ipKey, ipMax, windowMs);
+  if (!ipLimit.limited) {
+    ipLimit = await applyEdgeSlots(ipLimit, {
+      origin,
+      scope: ipKey,
+      max: ipMax,
+      windowMs,
+    });
+  }
   if (ipLimit.limited) {
-    return rateLimitResult(ipLimit, scope);
+    return rateLimitResult(ipLimit, via);
   }
 
   const provided = extractApiToken(request);
   const expected = getExpectedApiToken();
   if (!provided || !tokensMatch(provided, expected)) {
-    return unauthorizedResult(ipLimit, scope);
+    return unauthorizedResult(ipLimit, via);
   }
 
-  const tokenLimit = await consumeRateLimit(
+  let tokenLimit = await consumeRateLimit(
     `token:${digestToken(provided)}`,
     tokenMax,
     windowMs
   );
+  if (!tokenLimit.limited) {
+    tokenLimit = await applyEdgeSlots(tokenLimit, {
+      origin,
+      scope: `token:${digestToken(provided)}`,
+      max: tokenMax,
+      windowMs,
+    });
+  }
   if (tokenLimit.limited) {
-    return rateLimitResult(tokenLimit, scope);
+    return rateLimitResult(tokenLimit, via);
   }
 
   return { ok: true };

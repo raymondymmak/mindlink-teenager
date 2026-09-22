@@ -60,7 +60,7 @@ Use **sensitive** visibility, not `secret` (EAS Hosting cannot deploy `secret` v
 
 Unauthenticated or wrong-token POSTs return **401** `{ code: "UNAUTHORIZED" }`. Abusive calls return **429** `{ code: "RATE_LIMITED", retryAfter }` with `Retry-After`. Health (`POST /api/gemini` `{ "health": true }` and local `GET /api/gemini`) is gated the same way.
 
-Counters are not process-local. EAS Hosting may re-evaluate a route module on every request and spread traffic across Workers isolates, so a module-level `Map` never trips. Each request writes the bucket to `globalThis`, a `/tmp` file (same isolate), and the Workers Cache API (shared in a region). The highest count wins. Client IP prefers `CF-Connecting-IP` so a spoofed `X-Forwarded-For` cannot mint a fresh bucket. API responses send `Cache-Control: no-store` so a cached 401 cannot hide later 429s.
+Counters are not process-local. EAS Hosting runs Workers for Platforms, which rejects `caches.default`, and a module-level `Map` never reaches 429 across isolates. Each allowed request claims one edge slot by POSTing `/api/ratelimit` (a public, Gemini-free response cached for the window). A cache miss takes the slot; when every slot is a hit the route returns **429**. In-memory and `/tmp` buckets still apply inside one isolate. Client IP prefers `CF-Connecting-IP`, then the last `X-Forwarded-For` hop. API denials send `Cache-Control: no-store` so a cached 401 cannot hide a later 429.
 
 To rotate the gate: set a new random value on EAS `MINDLINK_API_TOKEN` (preview + production) **and** change `EXPO_PUBLIC_MINDLINK_API_TOKEN` in `.env.development` (CI `expo export` inlines that file). They must match or the demo gets 401.
 
