@@ -230,6 +230,31 @@ assert.strictEqual(exhausted.limited, true);
 assert.strictEqual(exhausted.remaining, 0);
 assert.ok(exhausted.retryAfter >= 1);
 
+resetApiGuardState();
+process.env.MINDLINK_RATE_LIMIT_IP_MAX = "2";
+process.env.MINDLINK_RATE_LIMIT_TOKEN_MAX = "20";
+const originalFetch = globalThis.fetch;
+const slotScopes = [];
+globalThis.fetch = async (_url, init) => {
+  slotScopes.push(JSON.parse(init.body).scope);
+  return {
+    headers: { get: () => "EAS; fwd=hit" },
+    async arrayBuffer() {
+      return new ArrayBuffer(0);
+    },
+  };
+};
+const sharedLimited = await evaluateApiGuard(
+  new Request("https://example.test/api/gemini", {
+    method: "POST",
+    headers: { "x-forwarded-for": "203.0.113.50" },
+  })
+);
+assert.strictEqual(sharedLimited.status, 429);
+assert.strictEqual(sharedLimited.body.code, "RATE_LIMITED");
+assert.ok(slotScopes.includes("unauth:shared"));
+globalThis.fetch = originalFetch;
+
 if (originalToken === undefined) delete process.env.MINDLINK_API_TOKEN;
 else process.env.MINDLINK_API_TOKEN = originalToken;
 if (originalIpMax === undefined) delete process.env.MINDLINK_RATE_LIMIT_IP_MAX;

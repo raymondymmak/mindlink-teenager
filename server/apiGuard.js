@@ -425,6 +425,14 @@ function publicHttpsOrigin(request) {
   }
 }
 
+// EAS Hosting does not set CF-Connecting-IP. X-Forwarded-For arrives as one
+// rotating hop, so it is not a client identity. A real client IP is present
+// when Cloudflare sets CF-Connecting-IP or a proxy appended a second hop.
+function clientIpIsStable(ipInfo) {
+  if (ipInfo.via === "cf") return true;
+  return ipInfo.via === "xff" && ipInfo.hops >= 2;
+}
+
 async function applyEdgeSlots(limitInfo, { origin, scope, max, windowMs }) {
   if (!origin) return limitInfo;
   try {
@@ -454,9 +462,10 @@ export async function evaluateApiGuard(request) {
   const ipInfo = readClientIp(request);
   const via = `${ipInfo.via};hops=${ipInfo.hops}`;
   const origin = publicHttpsOrigin(request);
+  const stableIp = clientIpIsStable(ipInfo);
   const ipKey = `ip:${digestToken(ipInfo.ip)}`;
   let ipLimit = await consumeRateLimit(ipKey, ipMax, windowMs);
-  if (!ipLimit.limited) {
+  if (!ipLimit.limited && stableIp) {
     ipLimit = await applyEdgeSlots(ipLimit, {
       origin,
       scope: ipKey,
@@ -471,6 +480,21 @@ export async function evaluateApiGuard(request) {
   const provided = extractApiToken(request);
   const expected = getExpectedApiToken();
   if (!provided || !tokensMatch(provided, expected)) {
+    if (!stableIp) {
+      let shared = await consumeRateLimit("unauth:shared", ipMax, windowMs);
+      if (!shared.limited) {
+        shared = await applyEdgeSlots(shared, {
+          origin,
+          scope: "unauth:shared",
+          max: ipMax,
+          windowMs,
+        });
+      }
+      if (shared.limited) {
+        return rateLimitResult(shared, via);
+      }
+      return unauthorizedResult(shared, via);
+    }
     return unauthorizedResult(ipLimit, via);
   }
 
