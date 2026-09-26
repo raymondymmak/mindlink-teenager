@@ -2,6 +2,17 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import { buildDiaryRecord, parseDiaryRecord } from "./sessionBriefLogic";
+import {
+  DEMO_PACK_ASYNC_KEYS,
+  RECORD_PREFIXES,
+  applyDemoPackToStorage,
+  basenameRecord,
+  buildDemoPack,
+  clearOnDeviceRecordKeys,
+  exportDemoPackFromStorage,
+  isRecordName,
+  planDemoPackRestore,
+} from "./demoPack";
 
 export const STORAGE_KEYS = {
   userName: "@user_name",
@@ -330,26 +341,86 @@ export async function listBriefSnapshots() {
   return snapshots;
 }
 
-export async function clearOnDeviceRecords() {
-  const prefixes = [
-    "diary-",
-    "checkin-",
-    "userReport-",
-    "sessionBrief-",
-    "briefSnapshot-",
-  ];
+function assertPackCoversStorageKeys() {
+  const allowlist = new Set(DEMO_PACK_ASYNC_KEYS);
+  Object.values(STORAGE_KEYS).forEach((key) => {
+    if (!allowlist.has(key)) {
+      throw new Error(`Demo pack allowlist is missing ${key}`);
+    }
+  });
+}
+
+export function exportDemoPackSync() {
+  const storage = webStorage();
+  if (!storage) return null;
+  assertPackCoversStorageKeys();
+  return exportDemoPackFromStorage(storage);
+}
+
+export async function exportDemoPack() {
+  const immediate = exportDemoPackSync();
+  if (immediate != null) return immediate;
+  assertPackCoversStorageKeys();
+  const records = [];
+  const directory = FileSystem.documentDirectory;
+  if (directory) {
+    const files = await FileSystem.readDirectoryAsync(directory);
+    for (const file of files) {
+      if (!isRecordName(file)) continue;
+      try {
+        const content = await FileSystem.readAsStringAsync(`${directory}${file}`);
+        records.push({ name: file, content });
+      } catch (error) {
+        console.error("Failed to read record for demo pack:", file, error);
+      }
+    }
+  }
+  const asyncValues = {};
+  for (const key of DEMO_PACK_ASYNC_KEYS) {
+    const value = await AsyncStorage.getItem(key);
+    if (value != null && value !== "") asyncValues[key] = value;
+  }
+  return buildDemoPack({ records, asyncValues });
+}
+
+export async function importDemoPack(raw) {
+  assertPackCoversStorageKeys();
   const storage = webStorage();
   if (storage) {
-    Object.keys(storage)
-      .filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
-      .forEach((key) => storage.removeItem(key));
+    return applyDemoPackToStorage(storage, raw);
+  }
+  const plan = planDemoPackRestore(raw);
+  await clearOnDeviceRecords();
+  for (const key of DEMO_PACK_ASYNC_KEYS) {
+    await AsyncStorage.removeItem(key);
+  }
+  const writtenPaths = {};
+  for (const record of plan.records) {
+    writtenPaths[record.name] = await writeFile(record.name, record.content);
+  }
+  for (const [key, value] of Object.entries(plan.asyncWrites)) {
+    const stored =
+      key === STORAGE_KEYS.lastReportPath ||
+      key === STORAGE_KEYS.lastSessionBriefPath ||
+      key === STORAGE_KEYS.lastBriefSnapshotPath
+        ? writtenPaths[basenameRecord(value)] || basenameRecord(value)
+        : value;
+    await AsyncStorage.setItem(key, stored);
+  }
+  return plan.pack;
+}
+
+export async function clearOnDeviceRecords() {
+  const storage = webStorage();
+  if (storage) {
+    clearOnDeviceRecordKeys(storage);
     return;
   }
   const directory = FileSystem.documentDirectory;
   if (!directory) return;
   const files = await FileSystem.readDirectoryAsync(directory);
   for (const file of files) {
-    if (prefixes.some((prefix) => file.startsWith(prefix))) {
+    if (RECORD_PREFIXES.some((prefix) => file.startsWith(prefix))) {
       await FileSystem.deleteAsync(`${directory}${file}`, { idempotent: true });
     }
   }

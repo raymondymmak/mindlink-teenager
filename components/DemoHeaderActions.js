@@ -1,35 +1,24 @@
 import React from "react";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useAppMode } from "./AppModeContext";
 import { APP_MODES, modeToggleLabel } from "../utils/appMode";
-import { clearOnDeviceRecords } from "../utils/localData";
 import { colors, fonts, radius } from "../utils/theme";
+import { useAppMode } from "./AppModeContext";
+import { useDemoPackActions } from "./useDemoPackActions";
 
 export default function DemoHeaderActions({ navigation }) {
   const { mode, setMode } = useAppMode();
+  const { savePack, loadPack, confirmReset } = useDemoPackActions(navigation);
   const toggleLabel = modeToggleLabel(mode);
 
-  const resetDemo = async () => {
-    try {
-      await clearOnDeviceRecords();
-      await AsyncStorage.clear();
-      await setMode(APP_MODES.teen);
-      navigation.navigate("Welcome");
-    } catch (error) {
-      console.error("Failed to reset app:", error);
-    }
-  };
-
   const toggleMode = () => {
-    setMode(mode === APP_MODES.teen ? APP_MODES.clinician : APP_MODES.teen);
+    setMode(mode === APP_MODES.clinician ? APP_MODES.teen : APP_MODES.clinician);
   };
 
   return (
     <View style={styles.row}>
       <TouchableOpacity
         onPress={toggleMode}
-        style={styles.modeButton}
+        style={styles.ghostButton}
         accessibilityRole="button"
         accessibilityLabel={toggleLabel}
         accessibilityHint={
@@ -39,14 +28,37 @@ export default function DemoHeaderActions({ navigation }) {
         }
         {...(Platform.OS === "web" ? { title: toggleLabel } : {})}
       >
-        <Text style={styles.modeButtonText}>{toggleLabel}</Text>
+        <Text style={styles.ghostButtonText}>{toggleLabel}</Text>
       </TouchableOpacity>
       <TouchableOpacity
-        onPress={resetDemo}
+        onPress={savePack}
+        style={styles.ghostButton}
+        accessibilityRole="button"
+        accessibilityLabel="Save demo pack"
+        accessibilityHint="Downloads a JSON pack of diary, daily chat, and Session Brief data"
+        testID="save-demo-pack"
+        {...(Platform.OS === "web" ? { title: "Save demo pack" } : {})}
+      >
+        <Text style={styles.ghostButtonText}>Save pack</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={loadPack}
+        style={styles.ghostButton}
+        accessibilityRole="button"
+        accessibilityLabel="Load demo pack"
+        accessibilityHint="Restores a saved JSON pack into on-device diary, chat, and Session Brief"
+        testID="load-demo-pack"
+        {...(Platform.OS === "web" ? { title: "Load demo pack" } : {})}
+      >
+        <Text style={styles.ghostButtonText}>Load pack</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={confirmReset}
         style={styles.resetButton}
         accessibilityRole="button"
         accessibilityLabel="Reset Demo"
-        accessibilityHint="Clears saved data and returns to the welcome screen"
+        accessibilityHint="Asks for confirmation, then clears saved data and returns to the welcome screen"
+        testID="reset-demo"
         {...(Platform.OS === "web" ? { title: "Reset Demo" } : {})}
       >
         <Text style={styles.resetButtonText}>Reset Demo</Text>
@@ -58,11 +70,14 @@ export default function DemoHeaderActions({ navigation }) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
+    justifyContent: "flex-end",
     marginRight: 10,
+    maxWidth: 560,
     gap: 8,
   },
-  modeButton: {
+  ghostButton: {
     paddingVertical: 5,
     paddingHorizontal: 10,
     backgroundColor: colors.surface,
@@ -70,7 +85,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius,
   },
-  modeButtonText: {
+  ghostButtonText: {
     color: colors.text,
     fontSize: 13,
     fontFamily: fonts.metaMedium,

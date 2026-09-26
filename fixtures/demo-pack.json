@@ -1,0 +1,39 @@
+{
+  "format": "mindlink-demo-pack",
+  "version": 1,
+  "exportedAt": "2026-09-20T12:10:00.000Z",
+  "records": [
+    {
+      "name": "briefSnapshot-2026-09-20-120000000.json",
+      "content": "{\"id\":\"briefSnapshot-2026-09-20-120000000\",\"createdAt\":\"2026-09-20T12:10:00.000Z\",\"windowStart\":null,\"windowEnd\":\"2026-09-20T12:10:00.000Z\",\"kind\":\"baseline\",\"windowLabel\":\"First visit\",\"safetySummary\":{\"concern\":\"none\",\"siOrSelfHarm\":false,\"otherRisk\":false,\"items\":[],\"stillOpen\":[]},\"themes\":[{\"label\":\"School pressure\",\"polarity\":\"new\",\"claim\":\"School pressure is the main presenting theme in this dry run.\",\"evidence\":[]}],\"presentingConcerns\":[\"School pressure\",\"#anxiety\"],\"unknowns\":[\"Sleep over the rest of exam week is still unclear.\"],\"sessionFocus\":[\"What felt heaviest about the exam?\"],\"sourceEntryIds\":[\"diary-2026-09-20-120000000.json\"],\"moodSummary\":{\"count\":1,\"average\":3,\"min\":3,\"max\":3},\"tagFrequency\":{\"school\":1,\"anxiety\":1}}"
+    },
+    {
+      "name": "checkin-2026-09-20-120500000.json",
+      "content": "{\"date\":\"2026-09-20\",\"createdAt\":\"2026-09-20T12:05:00.000Z\",\"messages\":[{\"role\":\"user\",\"text\":\"I kept thinking about the exam and could not sleep.\"},{\"role\":\"model\",\"text\":\"That sounds heavy. What part of the exam is taking up the most space?\"}]}"
+    },
+    {
+      "name": "diary-2026-09-20-120000000.json",
+      "content": "{\"date\":\"2026-09-20\",\"prompt\":\"How are you feeling today? Share your thoughts and emotions.\",\"response\":\"Exam week has me worried and I cannot focus in class.\",\"mood\":3,\"tags\":[\"school\",\"anxiety\"],\"createdAt\":\"2026-09-20T12:00:00.000Z\"}"
+    },
+    {
+      "name": "sessionBrief-2026-09-20.json",
+      "content": "{\"mode\":\"local-demo\",\"warning\":null,\"markdown\":\"# Session Brief\\nWindow: First visit\\n\\nSchool pressure is the main presenting theme in this dry run.\\n\",\"narrative\":\"\",\"rawFallback\":\"\",\"changeBrief\":{\"kind\":\"baseline\",\"windowLabel\":\"First visit\",\"windowStart\":null,\"windowEnd\":\"2026-09-20T12:10:00.000Z\",\"emptyWindow\":false,\"safetySummary\":{\"concern\":\"none\",\"siOrSelfHarm\":false,\"otherRisk\":false,\"items\":[],\"stillOpen\":[]},\"themes\":[{\"label\":\"School pressure\",\"polarity\":\"new\",\"claim\":\"School pressure is the main presenting theme in this dry run.\",\"evidence\":[]}],\"presentingConcerns\":[\"School pressure\",\"#anxiety\"],\"unknowns\":[\"Sleep over the rest of exam week is still unclear.\"],\"sessionFocus\":[\"What felt heaviest about the exam?\"],\"sourceEntryIds\":[\"diary-2026-09-20-120000000.json\"]},\"snapshotId\":\"briefSnapshot-2026-09-20-120000000\",\"priorSnapshotId\":null,\"date\":\"2026-09-20\",\"updatedAt\":\"2026-09-20T12:10:00.000Z\"}"
+    },
+    {
+      "name": "userReport-2026-09-20.txt",
+      "content": "Local check-in note for Alex\n\nExam week has been hard to focus through.\n"
+    }
+  ],
+  "async": {
+    "@user_name": "Alex",
+    "@last_report_path": "userReport-2026-09-20.txt",
+    "@last_report_date": "2026-09-20",
+    "@last_session_brief_path": "sessionBrief-2026-09-20.json",
+    "@last_brief_snapshot_path": "briefSnapshot-2026-09-20-120000000.json",
+    "@daily_chat_messages": "[{\"_id\":\"demo-user-1\",\"text\":\"I kept thinking about the exam and could not sleep.\",\"createdAt\":\"2026-09-20T12:05:00.000Z\",\"user\":{\"_id\":1,\"name\":\"Alex\"}},{\"_id\":\"demo-bot-1\",\"text\":\"That sounds heavy. What part of the exam is taking up the most space?\",\"createdAt\":\"2026-09-20T12:05:30.000Z\",\"user\":{\"_id\":2,\"name\":\"MindLink\"}}]",
+    "@app_mode": "clinician",
+    "@last_diary_entry": "Exam week has me worried and I cannot focus in class.",
+    "@last_diary_date": "2026-09-20",
+    "@initial_chat_completed": "true"
+  }
+}
