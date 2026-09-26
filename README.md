@@ -21,7 +21,7 @@ Design system (spec + static HTML samples; Expo UI unchanged until approved): [D
   - Auto-generation of reports which are archived to track progress over time.
 - Daily journaling with guided prompts, as well as tracking of mood and topic.
 - **Teen mode**: Diary, Chat, and a thin **My week** card (mood glance, top tags, ready for session?) — no full Session Brief.
-- **Clinician mode**: Session Brief beside mood trajectory, tag frequency, and key quotes / stressors. Opened from **Show clinician view** next to red **Reset Demo**.
+- **Clinician mode**: Session Brief beside mood trajectory, tag frequency, and key quotes / stressors. Opened from **Developer settings** → **Show clinician view**.
 - Local storage of all user data for privacy. Both modes read the same on-device store.
 - **Session Brief** for clinicians, including:
   - Mood trajectory from self-rated journal scores.
@@ -35,9 +35,28 @@ Design system (spec + static HTML samples; Expo UI unchanged until approved): [D
 
 1. Open the app and enter a preferred name. If server `GEMINI_KEY` is missing, the app continues to Teen mode (journal) in demo mode.
 2. In **Diary**, write a short entry, set a mood (try one day below 4/10), and add tags such as `school` or `anxiety`. **Chat** can also save a check-in.
-3. Confirm the teen header shows **Show clinician view** next to red **Reset Demo**. **My week** stays friendly (mood glance, top tags) — not the full Brief.
-4. Tap **Show clinician view**. The clinician shell shows Session Brief beside source panels built from the same local data.
-5. Tap **Show teen view** to return. **Reset Demo** stays red and clears on-device data.
+3. Open **Developer settings** in the header (gear). The menu holds **Show clinician view**, **Save pack**, **Load pack**, and **Reset Demo**. **My week** stays friendly (mood glance, top tags) — not the full Brief.
+4. Choose **Show clinician view**. The clinician shell shows Session Brief beside source panels built from the same local data.
+5. Open **Developer settings** and choose **Show teen view** to return. **Reset Demo** in that menu asks for confirmation, then clears on-device data and returns to the welcome screen.
+6. **Save pack** in **Developer settings** downloads one JSON file (diary, daily chat, check-ins, Session Brief, and Brief snapshots). On the welcome screen, **Load demo pack** restores that file after a reset. The same **Load pack** control is in **Developer settings** once you are back in the app.
+
+Sample pack with no keys: [`fixtures/demo-pack.json`](./fixtures/demo-pack.json). Checkpointers:
+
+```bash
+node scripts/verify-demo-pack.mjs --expect-loaded
+node scripts/verify-demo-pack.mjs --roundtrip
+node scripts/verify-developer-settings.mjs --structure
+node scripts/verify-developer-settings.mjs --actions
+```
+
+Those two commands run in-process against the storage helpers (no browser). Optional Playwright proof against local web or staging:
+
+```bash
+DEMO_PACK_BASE_URL=http://127.0.0.1:8081 node scripts/verify-demo-pack.mjs --roundtrip --browser
+STAGING_BASE_URL=https://raymondmak-app1--staging.expo.app node scripts/verify-demo-pack.mjs --expect-loaded --browser
+```
+
+`npm install --no-save playwright && npx playwright install chromium` once in that environment. Playwright is not a project dependency, so the EAS deploy install stays the same.
 
 Optional: from intro chat, **Finish early** still wraps up to the teen notes screen, then Home. The Brief is generated in Clinician view, not as the teen home.
 
@@ -147,6 +166,7 @@ node scripts/test-api-guard.mjs
 node scripts/test-context-api.mjs
 node scripts/test-context-route.mjs
 node scripts/test-retrieve-context.mjs
+npm run test:demo-pack
 ```
 
 ## Contributing

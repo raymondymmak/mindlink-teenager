@@ -17,10 +17,12 @@ import { checkGeminiConfigured, useGeminiConfigured } from '../utils/geminiClien
 import { Helmet } from 'react-helmet-async';
 import { colors, fonts, radius } from '../utils/theme';
 import { releaseWebKeyboardViewport } from '../utils/webViewport';
+import { useDemoPackActions } from '../components/useDemoPackActions';
 
 const WelcomeScreen = ({ navigation }) => {
   const [name, setName] = useState('');
   const { configured: geminiReady, ready: geminiStatusReady } = useGeminiConfigured();
+  const { loadPack } = useDemoPackActions(navigation);
 
   useEffect(() => {
     const loadName = async () => {
@@ -127,6 +129,20 @@ const WelcomeScreen = ({ navigation }) => {
                 <Text style={styles.buttonText}>Continue</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              onPress={loadPack}
+              style={styles.loadPackButton}
+              accessibilityRole="button"
+              accessibilityLabel="Load demo pack"
+              accessibilityHint="Restores a saved JSON pack of diary, chat, and Session Brief data"
+              testID="load-demo-pack-welcome"
+              {...(Platform.OS === 'web' ? { title: 'Load demo pack' } : {})}
+            >
+              <Text style={styles.loadPackText}>Load demo pack</Text>
+            </TouchableOpacity>
+            <Text style={styles.demoNote}>
+              After Reset, load a saved pack to bring back the dry-run diary, daily chat, and Session Brief.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -213,6 +229,21 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     backgroundColor: colors.border,
+  },
+  loadPackButton: {
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius,
+  },
+  loadPackText: {
+    color: colors.text,
+    fontSize: 13,
+    fontFamily: fonts.metaMedium,
   },
 });
 

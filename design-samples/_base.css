@@ -204,6 +204,61 @@ p {
   filter: brightness(0.95);
 }
 
+.dev-settings {
+  position: relative;
+}
+
+.dev-settings > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.dev-settings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dev-settings-trigger {
+  color: var(--muted);
+  font-family: var(--font-meta);
+  font-weight: 500;
+}
+
+.dev-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  min-width: 220px;
+  padding: 4px 0 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.dev-menu button {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 0 6px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-family: var(--font-meta);
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.dev-menu button.danger {
+  width: calc(100% - 12px);
+  margin-top: 4px;
+  color: #fff;
+  background: var(--danger);
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .btn-text {
   border: 0;
   background: transparent;
