@@ -6,6 +6,8 @@ Created by Raymond Mak and the MindLink team.
 
 MindLink is a mobile application designed to serve as a compassionate and supportive mental wellness assistant specifically for Hong Kong teenagers. It helps teenagers articulate symptoms and helps psychiatrists understand them.
 
+**Demo only — not medical advice or a substitute for care.** Designed for clinician dry-runs and teen wellness demos; on-device demo data is fictional.
+
 **Demo v1** is one Expo app with two lenses over the same on-device `localData`: **Teen** (capture + a thin My week card) and **Clinician** (Session Brief beside source panels). Mode is not two databases.
 
 The hero clinician deliverable is the **Session Brief**: a structured, scannable note synthesized from on-device journal entries, mood/tags, and chat check-ins.
