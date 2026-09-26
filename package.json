@@ -24,7 +24,8 @@
     "test:context-route": "node scripts/test-context-route.mjs",
     "test:retrieve-context": "node scripts/test-retrieve-context.mjs",
     "test:web-viewport": "node scripts/test-web-viewport.js",
-    "test:demo-pack": "node scripts/verify-demo-pack.mjs --roundtrip && node scripts/verify-demo-pack.mjs --expect-loaded"
+    "test:demo-pack": "node scripts/verify-demo-pack.mjs --roundtrip && node scripts/verify-demo-pack.mjs --expect-loaded",
+    "test:developer-settings": "node scripts/verify-developer-settings.mjs --structure && node scripts/verify-developer-settings.mjs --actions"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-mono": "^0.4.1",

@@ -11,7 +11,7 @@ Approved visual spec for the Expo restyle (issue [#22](https://github.com/raymon
 ## Principles
 
 1. **Quiet chrome.** The header is a hairline bar: title on the left, actions on the right. No gradients, blobs, glass, drop shadows, or illustrated mascots.
-2. **One red control.** **Reset Demo** is the only filled danger button. Everything else is stone + one blue accent.
+2. **One red control.** **Reset Demo** is the only filled danger button. It lives inside **Developer settings**, not as a peer header CTA. Everything else is stone + one blue accent.
 3. **Mode is a lens.** Teen and Clinician read the same on-device `localData`. The toggle is a ghost button, not a second product.
 4. **Clinical, not cute.** Session Brief looks like a note a psychiatrist can scan in a minute. Teen screens stay friendly without becoming a sticker pack.
 5. **Type stack (Atlas).** Space Grotesk for titles and primary body. IBM Plex Sans for meta (captions, tabs, section labels, helper text). IBM Plex Mono only for rare code/IDs — never as general UI. No Inter / Poppins / Nunito.
@@ -67,11 +67,12 @@ Sizes: 11px kicker (uppercase, muted, Plex Sans), 13px chrome, 14–15px body (G
 
 **MainApp (Diary, Chat check-in, My week, Clinician):**
 
-`[ screen title ] ……………… [ Show clinician view | Show teen view ] [ Reset Demo ]`
+`[ screen title ] ……………… [ Developer settings ]`
 
-- Mode toggle: ghost, 1px `--border`, 13px, not filled blue.
-- Reset: filled `--danger`, 13px, weight 600. Label stays **Reset Demo**.
-- They sit **next to each other** on the right (`DemoHeaderActions`).
+- One secondary control: gear + **Developer settings** (ghost, muted, 13px). Not a filled accent button.
+- The menu holds **Show clinician view** / **Show teen view**, **Save pack**, **Load pack**, and **Reset Demo**.
+- Reset stays the filled `--danger` item inside the menu (13px, weight 600). It still asks for confirmation before wiping on-device data.
+- The trigger lives on the right (`DemoHeaderActions`). The four actions are menu items, not sibling header buttons.
 
 **Intro chat only:**
 
@@ -89,7 +90,7 @@ Sizes: 11px kicker (uppercase, muted, Plex Sans), 13px chrome, 14–15px body (G
 
 ### Clinician
 
-- Same header row; label is **Show teen view**.
+- Same **Developer settings** control; the mode item reads **Show teen view**.
 - Wide: Brief column (~1.2) | source panels (~0.9), hairline divider. Narrow: stack Brief then panels.
 - Brief is the **fixed 11-section harness** (order never reshuffles):
 
@@ -137,11 +138,11 @@ When changing visuals later:
 
 1. Read this file and `design-samples/_base.css`. Match them; do not “improve” the palette.
 2. Touch presentation only: `screens/*`, `components/DemoHeaderActions.js`, `App.js` tab/header options. **Do not** change `utils/localData.js`, `utils/sessionBriefLogic.js` harness keys, `utils/sessionBriefEngine.js`, `app/api/context+api.js`, Gemini routing, or storage keys.
-3. Keep `#FAFAF9` / `#1D4ED8` / radius 8. Header actions stay in `DemoHeaderActions` (toggle then Reset). Fonts load via `useAppFonts` (`@expo-google-fonts/space-grotesk`, `ibm-plex-sans`, `ibm-plex-mono` for IDs only).
-4. Intro `InitChatScreen` keeps **Finish early** in `headerRight`. MainApp screens keep toggle + Reset.
+3. Keep `#FAFAF9` / `#1D4ED8` / radius 8. Demo tools stay in `DemoHeaderActions` behind **Developer settings**. Fonts load via `useAppFonts` (`@expo-google-fonts/space-grotesk`, `ibm-plex-sans`, `ibm-plex-mono` for IDs only).
+4. Intro `InitChatScreen` keeps **Finish early** in `headerRight`. MainApp screens keep Developer settings (mode, save, load, reset).
 5. Clinician `REPORT_SECTIONS` order and empty string stay. Wide split already exists in `ClinicianHomeScreen` (`width >= 960`).
 6. Web: keep `usePinWebPathToRoot` and the Expo Router shell. Do not add a second `NavigationContainer`.
-7. Verify: save diary with tags + mood 3/10 → My week glance → Show clinician view → 11 sections + panels → Show teen view → Finish early on intro still goes Summary → Home → Reset Demo clears and returns to Welcome. Chat/Brief still call `POST /api/context` when configured.
+7. Verify: save diary with tags + mood 3/10 → My week glance → Developer settings → Show clinician view → 11 sections + panels → Show teen view → Finish early on intro still goes Summary → Home → Reset Demo (confirm) clears and returns to Welcome. Chat/Brief still call `POST /api/context` when configured.
 8. Do not print `GEMINI_KEY` / `PINECONE_KEY`.
 
 React Native mapping (`utils/theme.js`):
@@ -169,7 +170,7 @@ radius: 8
 
 | File | What to judge |
 | --- | --- |
-| [`design-samples/teen-diary.html`](./design-samples/teen-diary.html) | Hairline cards, mood 1–10, chips, **Show clinician view** beside red **Reset Demo**, teen tabs |
+| [`design-samples/teen-diary.html`](./design-samples/teen-diary.html) | Hairline cards, mood 1–10, chips, **Developer settings** menu (mode, save, load, danger Reset), teen tabs |
 | [`design-samples/chat.html`](./design-samples/chat.html) | Transcript, composer, **Finish early** as text, same demo actions |
 | [`design-samples/clinician-brief.html`](./design-samples/clinician-brief.html) | 11-section harness, source panels, **Show teen view** + Reset |
 

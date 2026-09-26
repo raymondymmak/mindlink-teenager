@@ -12,8 +12,15 @@
         <div class="topbar-title">Chat</div>
         <div class="topbar-actions">
           <button type="button" class="btn-text">Finish early</button>
-          <button type="button" class="btn btn-ghost">Show clinician view</button>
-          <button type="button" class="btn btn-danger">Reset Demo</button>
+          <details class="dev-settings">
+            <summary class="btn btn-ghost dev-settings-trigger">Developer settings</summary>
+            <div class="dev-menu" role="menu">
+              <button type="button" role="menuitem">Show clinician view</button>
+              <button type="button" role="menuitem">Save pack</button>
+              <button type="button" role="menuitem">Load pack</button>
+              <button type="button" class="danger" role="menuitem">Reset Demo</button>
+            </div>
+          </details>
         </div>
       </header>
       <div class="sample-strip">
@@ -30,7 +37,7 @@
           <p class="note">
             Intro chat: <strong>Finish early</strong> wraps to the teen summary, then Home —
             it does not open the clinician Brief. After Home, this tab keeps
-            <strong>Show clinician view</strong> next to red <strong>Reset Demo</strong>.
+            <strong>Developer settings</strong> for mode, save, load, and red <strong>Reset Demo</strong>.
             RAG still runs as <code>POST /api/context</code> before each Gemini turn.
           </p>
 

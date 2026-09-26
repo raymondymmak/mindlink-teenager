@@ -11,8 +11,15 @@
       <header class="topbar">
         <div class="topbar-title">Session Brief</div>
         <div class="topbar-actions">
-          <button type="button" class="btn btn-ghost">Show teen view</button>
-          <button type="button" class="btn btn-danger">Reset Demo</button>
+          <details class="dev-settings">
+            <summary class="btn btn-ghost dev-settings-trigger">Developer settings</summary>
+            <div class="dev-menu" role="menu">
+              <button type="button" role="menuitem">Show teen view</button>
+              <button type="button" role="menuitem">Save pack</button>
+              <button type="button" role="menuitem">Load pack</button>
+              <button type="button" class="danger" role="menuitem">Reset Demo</button>
+            </div>
+          </details>
         </div>
       </header>
       <div class="sample-strip">

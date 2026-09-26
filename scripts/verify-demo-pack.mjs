@@ -247,12 +247,21 @@ async function resetBrowserStorage(page, baseUrl) {
   await page.getByTestId("load-demo-pack-welcome").waitFor({ timeout: 45000 });
 }
 
+async function openDeveloperSettings(page) {
+  const trigger = page.getByTestId("developer-settings");
+  await trigger.waitFor({ state: "visible", timeout: 45000 });
+  const save = page.getByTestId("save-demo-pack");
+  if (await save.isVisible().catch(() => false)) return;
+  await trigger.click();
+  await save.waitFor({ state: "visible", timeout: 15000 });
+}
+
 async function loadPackThroughUi(page, filePath, testId) {
   const chooserPromise = page.waitForEvent("filechooser", { timeout: 15000 });
   await page.getByTestId(testId).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(filePath);
-  await page.getByTestId("save-demo-pack").waitFor({ timeout: 45000 });
+  await openDeveloperSettings(page);
 }
 
 async function readBrowserState(page) {
@@ -331,6 +340,7 @@ async function runBrowser(mode) {
       return;
     }
 
+    await openDeveloperSettings(page);
     const downloadPromise = page.waitForEvent("download", { timeout: 15000 });
     await page.getByTestId("save-demo-pack").click();
     const download = await downloadPromise;
@@ -340,6 +350,7 @@ async function runBrowser(mode) {
     assert.equal(FORBIDDEN.test(savedText), false, "downloaded pack contains forbidden key material");
     assert.equal(JSON.parse(savedText).format, "mindlink-demo-pack");
 
+    await openDeveloperSettings(page);
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByTestId("reset-demo").click();
     await page.getByTestId("load-demo-pack-welcome").waitFor({ timeout: 45000 });
