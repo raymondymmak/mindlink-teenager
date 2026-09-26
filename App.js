@@ -5,7 +5,7 @@
 import React, { useEffect } from "react";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Platform, TextInput } from "react-native";
+import { Platform, TextInput, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { HelmetProvider } from "react-helmet-async";
 import { useAppFonts } from "./components/useAppFonts";
@@ -59,6 +59,7 @@ import JourneyContinuesScreen from "./screens/JourneyContinuesScreen";
 import MyWeekScreen from "./screens/MyWeekScreen";
 import ClinicianBriefScreen from "./screens/ClinicianHomeScreen";
 import DemoHeaderActions from "./components/DemoHeaderActions";
+import DemoScreenHeader from "./components/DemoScreenHeader";
 import { AppModeProvider, useAppMode } from "./components/AppModeContext";
 import { WebViewportReset } from "./components/WebViewportReset";
 import { APP_MODES } from "./utils/appMode";
@@ -105,14 +106,25 @@ function teenTabIcon(routeName, focused) {
   return focused ? "ellipse" : "ellipse-outline";
 }
 
-function ClinicianSessionShell({ headerRight }) {
+function ClinicianSessionShell({ navigation, compact }) {
   return (
     <Tab.Navigator
       key="clinician"
       screenOptions={{
         ...headerScreenOptions,
         headerShown: true,
-        headerRight,
+        ...(compact
+          ? {
+              header: ({ options }) => (
+                <DemoScreenHeader
+                  navigation={navigation}
+                  title={options.title || "Session Brief"}
+                />
+              ),
+            }
+          : {
+              headerRight: () => <DemoHeaderActions navigation={navigation} />,
+            }),
         tabBarStyle: { display: "none", height: 0 },
       }}
     >
@@ -125,7 +137,7 @@ function ClinicianSessionShell({ headerRight }) {
   );
 }
 
-function TeenTabs({ headerRight }) {
+function TeenTabs({ navigation, compact }) {
   return (
     <Tab.Navigator
       key="teen"
@@ -140,7 +152,18 @@ function TeenTabs({ headerRight }) {
         ...headerScreenOptions,
         ...tabBarScreenOptions,
         headerShown: true,
-        headerRight,
+        ...(compact
+          ? {
+              header: ({ options }) => (
+                <DemoScreenHeader
+                  navigation={navigation}
+                  title={options.title || route.name}
+                />
+              ),
+            }
+          : {
+              headerRight: () => <DemoHeaderActions navigation={navigation} />,
+            }),
       })}
     >
       <Tab.Screen name="Diary" component={DiaryScreen} />
@@ -156,13 +179,14 @@ function TeenTabs({ headerRight }) {
 
 function ModeShell({ navigation }) {
   const { mode } = useAppMode();
-  const headerRight = () => <DemoHeaderActions navigation={navigation} />;
+  const { width } = useWindowDimensions();
+  const compact = width < 700;
 
   if (mode === APP_MODES.clinician) {
-    return <ClinicianSessionShell headerRight={headerRight} />;
+    return <ClinicianSessionShell navigation={navigation} compact={compact} />;
   }
 
-  return <TeenTabs headerRight={headerRight} />;
+  return <TeenTabs navigation={navigation} compact={compact} />;
 }
 
 export default function App() {

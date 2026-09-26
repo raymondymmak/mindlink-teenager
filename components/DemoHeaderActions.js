@@ -5,7 +5,7 @@ import { colors, fonts, radius } from "../utils/theme";
 import { useAppMode } from "./AppModeContext";
 import { useDemoPackActions } from "./useDemoPackActions";
 
-export default function DemoHeaderActions({ navigation }) {
+export default function DemoHeaderActions({ navigation, compact = false }) {
   const { mode, setMode } = useAppMode();
   const { savePack, loadPack, confirmReset } = useDemoPackActions(navigation);
   const toggleLabel = modeToggleLabel(mode);
@@ -15,7 +15,7 @@ export default function DemoHeaderActions({ navigation }) {
   };
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, compact && styles.rowCompact]}>
       <TouchableOpacity
         onPress={toggleMode}
         style={styles.ghostButton}
@@ -74,8 +74,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     marginRight: 10,
-    maxWidth: 560,
     gap: 8,
+  },
+  rowCompact: {
+    width: "100%",
+    marginRight: 0,
   },
   ghostButton: {
     paddingVertical: 5,

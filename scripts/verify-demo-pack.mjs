@@ -21,7 +21,9 @@
  *   STAGING_BASE_URL=https://raymondmak-app1--staging.expo.app node scripts/verify-demo-pack.mjs --expect-loaded --browser
  * Install once in the environment that runs the browser (not a project dependency):
  *   npm install --no-save playwright && npx playwright install chromium
- * If neither DEMO_PACK_BASE_URL nor STAGING_BASE_URL is set, --browser exits with instructions.
+ * If Playwright's Chromium build is missing, the script falls back to installed Google Chrome
+ * (`PLAYWRIGHT_CHANNEL=chrome` forces that). If neither DEMO_PACK_BASE_URL nor
+ * STAGING_BASE_URL is set, --browser exits with instructions.
  */
 
 import assert from "node:assert/strict";
@@ -300,7 +302,17 @@ async function runBrowser(mode) {
     process.exit(1);
   }
 
-  const browser = await chromium.launch({ headless: true });
+  const launchOptions = { headless: true };
+  if (process.env.PLAYWRIGHT_CHANNEL) {
+    launchOptions.channel = process.env.PLAYWRIGHT_CHANNEL;
+  }
+  let browser;
+  try {
+    browser = await chromium.launch(launchOptions);
+  } catch (error) {
+    if (launchOptions.channel) throw error;
+    browser = await chromium.launch({ headless: true, channel: "chrome" });
+  }
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   try {
     await resetBrowserStorage(page, baseUrl);
