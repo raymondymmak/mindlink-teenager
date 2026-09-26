@@ -1,6 +1,6 @@
 # MindLink - Mental Wellness Assistant
 
-Created by Mak Yiu Man Raymond (麥耀文) and the MindLink team.
+Created by Raymond Mak and the MindLink team.
 
 ## Overview
 
@@ -171,4 +171,4 @@ npm run test:demo-pack
 
 ## Contributing
 
-For contributions to this project, please contact Mak Yiu Man Raymond at [LinkedIn](https://www.linkedin.com/in/raymondymmak).
+For contributions to this project, please contact Raymond Mak at [LinkedIn](https://www.linkedin.com/in/raymondymmak).
