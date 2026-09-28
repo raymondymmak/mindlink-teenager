@@ -13,6 +13,7 @@
     "test:ensure-dotenv": "node scripts/test-ensure-dotenv.js",
     "test:session-brief": "node scripts/test-session-brief.js",
     "test:change-brief": "node scripts/test-change-brief.js",
+    "test:brief-gold": "node scripts/eval-brief-gold.mjs",
     "test:teen-week": "node scripts/test-teen-week.js",
     "test:theme": "node scripts/test-theme.js",
     "test:gemini-client": "node scripts/test-gemini-client.mjs",
