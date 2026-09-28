@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -14,6 +15,7 @@ import {
   generateSessionBriefArtifact,
   loadCachedSessionBrief,
   loadSessionBriefInputs,
+  saveClinicianCorrectedSnapshot,
 } from "../utils/sessionBriefEngine";
 import {
   analyzeLocalSignals,
@@ -32,6 +34,29 @@ import { shareOrCopyText } from "../utils/shareText";
 import { colors, fonts, radius } from "../utils/theme";
 
 const SCALE_SECTIONS = new Set(["presentingConcerns", "anxietyStressLevels"]);
+
+const POLARITY_OPTIONS = [
+  { id: "improved", label: "Improved" },
+  { id: "worse", label: "Worse" },
+  { id: "new", label: "New" },
+  { id: "stable", label: "Stable" },
+];
+
+function polarityLabel(polarity) {
+  return (
+    POLARITY_OPTIONS.find((option) => option.id === polarity)?.label || "Stable"
+  );
+}
+
+function draftThemesFromBrief(changeBrief) {
+  return (changeBrief?.themes || []).map((theme, index) => ({
+    index,
+    label: theme.label,
+    polarity: theme.polarity || "new",
+    claim: theme.claim || "",
+    drop: false,
+  }));
+}
 
 function resolveBriefSections(brief) {
   if (brief?.sections) {
@@ -127,6 +152,7 @@ function EvidenceChip({ evidence }) {
 function ClaimCard({ theme }) {
   return (
     <View style={styles.claimCard}>
+      <Text style={styles.polarityMark}>{polarityLabel(theme.polarity)}</Text>
       <Text style={styles.claimText}>{theme.claim}</Text>
       {(theme.evidence || []).length > 0 ? (
         <View style={styles.chipRow}>
@@ -155,6 +181,67 @@ function ChangeSection({ title, themes, emptyLabel }) {
       ) : (
         <Text style={styles.emptyMuted}>{emptyLabel}</Text>
       )}
+    </View>
+  );
+}
+
+function ThemeCorrectionCard({ theme, onChange, onRemove }) {
+  return (
+    <View style={styles.editCard}>
+      <Text style={styles.editLabel}>{theme.label}</Text>
+      <View
+        style={styles.polarityRow}
+        accessibilityRole="radiogroup"
+        accessibilityLabel={`Polarity for ${theme.label}`}
+      >
+        {POLARITY_OPTIONS.map((option) => {
+          const selected = theme.polarity === option.id;
+          const label =
+            option.id === "stable"
+              ? `Mark ${theme.label} stable and drop it from the change list`
+              : `Mark ${theme.label} ${option.label.toLowerCase()}`;
+          return (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.polarityOption,
+                selected && styles.polarityOptionOn,
+              ]}
+              onPress={() => onChange({ ...theme, polarity: option.id })}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              accessibilityState={{ selected }}
+              testID={`theme-polarity-${theme.index}-${option.id}`}
+            >
+              <Text
+                style={[
+                  styles.polarityOptionText,
+                  selected && styles.polarityOptionTextOn,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <TextInput
+        value={theme.claim}
+        onChangeText={(claim) => onChange({ ...theme, claim })}
+        multiline
+        accessibilityLabel={`Claim for ${theme.label}`}
+        testID={`theme-claim-${theme.index}`}
+        style={styles.claimInput}
+      />
+      <TouchableOpacity
+        onPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${theme.label}`}
+        testID={`remove-theme-${theme.index}`}
+        style={styles.removeButton}
+      >
+        <Text style={styles.removeButtonText}>Remove theme</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -227,6 +314,11 @@ export default function ClinicianHomeScreen() {
   const [shareStatus, setShareStatus] = useState("");
   const [showFullerNote, setShowFullerNote] = useState(false);
   const [windowMode, setWindowMode] = useState("last-brief");
+  const [editing, setEditing] = useState(false);
+  const [draftThemes, setDraftThemes] = useState([]);
+  const [draftNote, setDraftNote] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
   const { configured: geminiReady } = useGeminiConfigured();
 
   const runGeneration = useCallback(
@@ -237,6 +329,8 @@ export default function ClinicianHomeScreen() {
     } = {}) => {
       const mode = nextWindowMode || windowMode;
       setIsGenerating(true);
+      setEditing(false);
+      setSaveStatus("");
       setError("");
       try {
         const record = await generateSessionBriefArtifact({
@@ -296,6 +390,41 @@ export default function ClinicianHomeScreen() {
     };
   }, [runGeneration]);
 
+  const startEditing = () => {
+    if (!changeBrief) return;
+    setDraftThemes(draftThemesFromBrief(changeBrief));
+    setDraftNote(changeBrief.clinicianNote || "");
+    setEditing(true);
+    setSaveStatus("");
+    setError("");
+  };
+
+  const saveCorrections = async () => {
+    if (!changeBrief) return;
+    setIsSaving(true);
+    setError("");
+    try {
+      const result = await saveClinicianCorrectedSnapshot({
+        changeBrief,
+        edits: {
+          themes: draftThemes,
+          clinicianNote: draftNote,
+        },
+        record: brief,
+      });
+      setBrief(result.record);
+      if (result.record?.analysis) setAnalysis(result.record.analysis);
+      setEditing(false);
+      setSaveStatus(
+        "Corrections saved. The next Brief compares against this snapshot."
+      );
+    } catch (err) {
+      setError(err.message || "Could not save corrections.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleShare = async () => {
     const shared = await shareOrCopyText(
       "MindLink Session Brief",
@@ -318,6 +447,8 @@ export default function ClinicianHomeScreen() {
   const improved = themesByPolarity(changeBrief?.themes, "improved");
   const worse = themesByPolarity(changeBrief?.themes, "worse");
   const newer = themesByPolarity(changeBrief?.themes, "new");
+  const stable = themesByPolarity(changeBrief?.themes, "stable");
+  const visibleDrafts = draftThemes.filter((theme) => !theme.drop);
   const hasSnapshot = Boolean(brief?.snapshotId || changeBrief?.snapshotId);
   const showWindowSwitch = Boolean(brief?.priorSnapshotId);
 
@@ -424,11 +555,28 @@ export default function ClinicianHomeScreen() {
           style={[styles.secondaryButton, !brief && styles.buttonDisabled]}
           onPress={handleShare}
           disabled={!brief}
+          accessibilityRole="button"
+          accessibilityLabel="Copy or share Session Brief"
         >
           <Text style={styles.secondaryButtonText}>Copy / Share</Text>
         </TouchableOpacity>
+        {changeBrief && !editing ? (
+          <TouchableOpacity
+            style={[styles.secondaryButton, isGenerating && styles.buttonDisabled]}
+            onPress={startEditing}
+            disabled={isGenerating}
+            accessibilityRole="button"
+            accessibilityLabel="Edit corrections"
+            testID="edit-brief-corrections"
+          >
+            <Text style={styles.secondaryButtonText}>Edit corrections</Text>
+          </TouchableOpacity>
+        ) : null}
         {shareStatus ? (
           <Text style={styles.shareStatus}>{shareStatus}</Text>
+        ) : null}
+        {saveStatus ? (
+          <Text style={styles.shareStatus}>{saveStatus}</Text>
         ) : null}
         {brief?.snapshotId ? (
           <Text style={styles.shareStatus}>
@@ -474,7 +622,82 @@ export default function ClinicianHomeScreen() {
         </View>
       ) : null}
 
-      {changeBrief && isBaseline ? (
+      {editing && changeBrief ? (
+        <View style={styles.section} testID="brief-correction-editor">
+          <Text style={styles.sectionTitle}>Correct this Brief</Text>
+          <Text style={styles.finePrint}>
+            Polarity and claim edits become the snapshot for the next visit.
+            Stable keeps a theme without listing it as a change. Removing a
+            theme drops it. Safety flags stay tied to the teen's notes.
+          </Text>
+          {visibleDrafts.length > 0 ? (
+            visibleDrafts.map((theme) => (
+              <ThemeCorrectionCard
+                key={`edit-${theme.index}`}
+                theme={theme}
+                onChange={(next) =>
+                  setDraftThemes((themes) =>
+                    themes.map((item) =>
+                      item.index === theme.index ? next : item
+                    )
+                  )
+                }
+                onRemove={() =>
+                  setDraftThemes((themes) =>
+                    themes.map((item) =>
+                      item.index === theme.index ? { ...item, drop: true } : item
+                    )
+                  )
+                }
+              />
+            ))
+          ) : (
+            <Text style={styles.emptyMuted}>
+              No themes left on this correction. You can still save a note.
+            </Text>
+          )}
+          <Text style={styles.editLabel}>Clinician note</Text>
+          <TextInput
+            value={draftNote}
+            onChangeText={setDraftNote}
+            multiline
+            maxLength={500}
+            placeholder="Optional note for the next visit"
+            placeholderTextColor={colors.muted}
+            accessibilityLabel="Clinician note"
+            testID="clinician-note"
+            style={styles.claimInput}
+          />
+          <View style={styles.editActions}>
+            <TouchableOpacity
+              style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
+              onPress={saveCorrections}
+              disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityLabel="Save corrections"
+              testID="save-brief-corrections"
+            >
+              {isSaving ? (
+                <ActivityIndicator color={colors.surface} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Save corrections</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => setEditing(false)}
+              disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel corrections"
+              testID="cancel-brief-corrections"
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
+      {changeBrief && !editing && isBaseline ? (
         <>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Presenting concerns</Text>
@@ -507,7 +730,7 @@ export default function ClinicianHomeScreen() {
         </>
       ) : null}
 
-      {changeBrief && !isBaseline ? (
+      {changeBrief && !editing && !isBaseline ? (
         <>
           {changeBrief.emptyWindow ? (
             <Text style={styles.emptyMuted}>
@@ -530,7 +753,21 @@ export default function ClinicianHomeScreen() {
             themes={newer}
             emptyLabel="None noted in this window."
           />
+          {stable.length > 0 ? (
+            <ChangeSection
+              title="Stable"
+              themes={stable}
+              emptyLabel="None held as stable."
+            />
+          ) : null}
         </>
+      ) : null}
+
+      {changeBrief && !editing && changeBrief.clinicianNote ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Clinician note</Text>
+          <Text style={styles.sectionContent}>{changeBrief.clinicianNote}</Text>
+        </View>
       ) : null}
 
       {changeBrief ? (
@@ -1078,6 +1315,80 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
     marginBottom: 8,
+  },
+  polarityMark: {
+    fontSize: 11,
+    fontFamily: fonts.metaSemi,
+    color: colors.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  editCard: {
+    marginBottom: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  editLabel: {
+    fontSize: 14,
+    fontFamily: fonts.metaSemi,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  polarityRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  polarityOption: {
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  polarityOptionOn: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  polarityOptionText: {
+    fontSize: 12,
+    fontFamily: fonts.metaMedium,
+    color: colors.muted,
+  },
+  polarityOptionTextOn: {
+    color: colors.accent,
+  },
+  claimInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius,
+    backgroundColor: colors.bg,
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 72,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+    textAlignVertical: "top",
+  },
+  removeButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+  },
+  removeButtonText: {
+    fontSize: 13,
+    fontFamily: fonts.metaMedium,
+    color: colors.danger,
+  },
+  editActions: {
+    gap: 10,
+    marginTop: 4,
   },
   chipRow: {
     gap: 8,

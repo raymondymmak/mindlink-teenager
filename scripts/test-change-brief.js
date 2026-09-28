@@ -4,6 +4,7 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const {
+  applyClinicianBriefEdits,
   buildLocalChangeBrief,
   buildChangeBriefPrompt,
   collectSourceIds,
@@ -13,7 +14,9 @@ const {
   mergeChangeBrief,
   normalizeSnapshot,
   parseChangeBrief,
+  saveClinicianCorrectedSnapshot,
   scanSafety,
+  shouldPersistGeneratedSnapshot,
   snapshotFromChangeBrief,
   stripInventedScales,
   themesByPolarity,
@@ -401,6 +404,196 @@ function testStripInventedScales() {
   assert.ok(!/PHQ-9\s*12/.test(cleaned));
 }
 
+function quietReturnInputs() {
+  const base = baselineInputs();
+  return {
+    ...base,
+    entries: [
+      ...base.entries,
+      {
+        date: "2026-09-12",
+        createdAt: "2026-09-12T09:00:00.000Z",
+        file: "diary-2026-09-12-quiet.json",
+        mood: 4,
+        tags: ["school"],
+        response:
+          "I went to class and finished the assignment about the school project.",
+      },
+    ],
+  };
+}
+
+function schoolTheme(brief) {
+  return (brief.themes || []).find((theme) => /school/i.test(theme.label)) || null;
+}
+
+function testClinicianEditDoesNotInventSafety() {
+  const brief = buildLocalChangeBrief({
+    inputs: baselineInputs(),
+    now: new Date("2026-09-06T12:00:00.000Z"),
+  });
+  const schoolIndex = brief.themes.findIndex((theme) => /school/i.test(theme.label));
+  const anxietyIndex = brief.themes.findIndex((theme) => /anxiety/i.test(theme.label));
+  assert.ok(schoolIndex >= 0);
+  assert.ok(anxietyIndex >= 0);
+  const saved = saveClinicianCorrectedSnapshot(
+    brief,
+    {
+      themes: [
+        {
+          index: schoolIndex,
+          polarity: "worse",
+          claim: "Clinician: school pressure is the session priority. HAM-D 18.",
+        },
+        { index: anxietyIndex, polarity: "drop" },
+        {
+          index: 99,
+          label: "Suicidal ideation",
+          polarity: "worse",
+          claim: "I want to die",
+        },
+      ],
+      clinicianNote: "Reviewed in room. HAM-D 12. No new scale.",
+      safetySummary: {
+        concern: "elevated",
+        siOrSelfHarm: true,
+        items: [{ kind: "si", text: "invented" }],
+      },
+      moodSummary: { average: 1, count: 9 },
+    },
+    {
+      id: "briefSnapshot-corrected",
+      createdAt: "2026-09-06T12:30:00.000Z",
+      record: { mode: "local-demo", analysis: { userName: "Alex" } },
+    }
+  );
+  const school = schoolTheme(saved.snapshot);
+  assert.ok(school);
+  assert.strictEqual(school.polarity, "worse");
+  assert.ok(school.claim.includes("session priority"));
+  assert.ok(!/HAM-D\s*18/.test(school.claim));
+  assert.strictEqual(
+    school.evidence.length,
+    schoolTheme(brief).evidence.length
+  );
+  assert.ok(!saved.snapshot.themes.some((theme) => /anxiety/i.test(theme.label)));
+  assert.ok(!saved.snapshot.themes.some((theme) => /suicidal/i.test(theme.label)));
+  assert.ok(saved.snapshot.clinicianNote.includes("Reviewed in room"));
+  assert.ok(!/HAM-D\s*12/.test(saved.snapshot.clinicianNote));
+  assert.strictEqual(saved.snapshot.safetySummary.siOrSelfHarm, false);
+  assert.notStrictEqual(saved.snapshot.safetySummary.concern, "elevated");
+  assert.strictEqual(saved.snapshot.moodSummary.average, brief.moodSummary.average);
+  const reloaded = normalizeSnapshot(JSON.parse(JSON.stringify(saved.snapshot)));
+  assert.strictEqual(schoolTheme(reloaded).polarity, "worse");
+  assert.strictEqual(schoolTheme(reloaded).claim, school.claim);
+  assert.ok(saved.record.markdown.includes("session priority"));
+  assert.ok(saved.record.markdown.includes("(worse)"));
+  assert.ok(saved.record.markdown.includes("## Clinician note"));
+  assert.strictEqual(saved.record.changeBrief.clinicianCorrected, true);
+  assert.strictEqual(saved.record.snapshotId, "briefSnapshot-corrected");
+  assert.ok(!/HAM-D\s*\d+/.test(saved.record.markdown));
+}
+
+function testClinicianEditCannotClearLocalSafety() {
+  const local = buildLocalChangeBrief({
+    inputs: {
+      userName: "Alex",
+      entries: [
+        {
+          date: "2026-09-13",
+          file: "diary-si.json",
+          mood: 2,
+          tags: ["anxiety"],
+          response: "I want to die after the exam ranking came out.",
+        },
+      ],
+      checkIns: [],
+      summaries: [],
+    },
+  });
+  assert.strictEqual(local.safetySummary.siOrSelfHarm, true);
+  const edited = applyClinicianBriefEdits(local, {
+    themes: [{ index: 0, polarity: "improved", claim: "Looks lighter. PHQ-9 4." }],
+    safetySummary: { concern: "none", siOrSelfHarm: false, items: [] },
+    clinicianNote: "Denied current plan.",
+  });
+  assert.strictEqual(edited.safetySummary.siOrSelfHarm, true);
+  assert.strictEqual(edited.safetySummary.concern, "elevated");
+  assert.ok(!/PHQ-9\s*4/.test(edited.themes[0].claim));
+  assert.ok(edited.themes[0].claim.includes("Looks lighter"));
+}
+
+function testCorrectedPriorChangesNextBrief() {
+  const baseline = buildLocalChangeBrief({
+    inputs: baselineInputs(),
+    now: new Date("2026-09-06T12:00:00.000Z"),
+  });
+  const schoolIndex = baseline.themes.findIndex((theme) =>
+    /school/i.test(theme.label)
+  );
+  const rawSnapshot = snapshotFromChangeBrief(baseline, {
+    id: "briefSnapshot-raw",
+    createdAt: "2026-09-06T12:00:00.000Z",
+  });
+  const corrected = saveClinicianCorrectedSnapshot(
+    baseline,
+    {
+      themes: [
+        {
+          index: schoolIndex,
+          polarity: "improved",
+          claim: "Clinician marked school as lighter than the draft.",
+        },
+      ],
+      clinicianNote: "Carry school as improved.",
+    },
+    {
+      id: "briefSnapshot-corrected-return",
+      createdAt: "2026-09-06T12:00:00.000Z",
+    }
+  ).snapshot;
+
+  const inputs = quietReturnInputs();
+  const uncorrected = buildLocalChangeBrief({
+    inputs,
+    priorSnapshot: rawSnapshot,
+    now: new Date("2026-09-14T12:00:00.000Z"),
+  });
+  const next = buildLocalChangeBrief({
+    inputs,
+    priorSnapshot: corrected,
+    now: new Date("2026-09-14T12:00:00.000Z"),
+  });
+  assert.strictEqual(schoolTheme(uncorrected)?.polarity, "worse");
+  assert.ok(!schoolTheme(next) || schoolTheme(next).polarity === "stable");
+  assert.notStrictEqual(schoolTheme(next)?.polarity, "worse");
+  assert.ok(next.themes.every((theme) => theme.polarity !== "worse" || !/school/i.test(theme.label)));
+
+  const empty = buildLocalChangeBrief({
+    inputs: baselineInputs(),
+    priorSnapshot: corrected,
+    now: new Date("2026-09-14T12:00:00.000Z"),
+  });
+  assert.strictEqual(empty.emptyWindow, true);
+  assert.strictEqual(empty.safetySummary.siOrSelfHarm, false);
+  assert.notStrictEqual(empty.safetySummary.concern, "elevated");
+  assert.strictEqual(shouldPersistGeneratedSnapshot(corrected, empty), false);
+  assert.ok(
+    !JSON.stringify(empty.themes).includes("lighter than the draft")
+  );
+  assert.ok(!/HAM-D\s*\d+/.test(JSON.stringify(empty)));
+  const prompt = buildChangeBriefPrompt({
+    kind: "change",
+    priorSnapshot: corrected,
+    analysis: analyzeLocalSignals(baselineInputs()),
+    windowAnalysis: analyzeLocalSignals(baselineInputs()),
+    evidenceCandidates: [],
+    windowLabel: WINDOW_LABELS.sinceLastBrief,
+  });
+  assert.ok(prompt.includes("Carry school as improved."));
+  assert.ok(prompt.includes("lighter than the draft"));
+}
+
 function testLastWeekLabel() {
   const baseline = buildLocalChangeBrief({ inputs: baselineInputs() });
   const snapshot = snapshotFromChangeBrief(baseline, {
@@ -432,6 +625,9 @@ function main() {
   testInstructionForbidsScores();
   testTeenLensUnchanged();
   testStripInventedScales();
+  testClinicianEditDoesNotInventSafety();
+  testClinicianEditCannotClearLocalSafety();
+  testCorrectedPriorChangesNextBrief();
   testLastWeekLabel();
   console.log("change-brief unit tests passed");
 }

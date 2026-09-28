@@ -22,6 +22,8 @@ import {
   filterInputsSinceSnapshot,
   formatChangeBriefMarkdown,
   parseChangeBrief,
+  saveClinicianCorrectedSnapshot as prepareClinicianCorrectedSnapshot,
+  shouldPersistGeneratedSnapshot,
   snapshotFromChangeBrief,
 } from "./changeBriefLogic";
 import {
@@ -61,12 +63,6 @@ export async function loadSessionBriefInputs() {
     getUserName(),
   ]);
   return { entries, checkIns, summaries, userName };
-}
-
-function sameIdSet(left = [], right = []) {
-  if (left.length !== right.length) return false;
-  const set = new Set(left);
-  return right.every((id) => set.has(id));
 }
 
 export async function generateSessionBriefArtifact({
@@ -150,10 +146,10 @@ export async function generateSessionBriefArtifact({
   });
 
   let snapshot = priorSnapshot;
-  const identicalSources =
-    priorSnapshot &&
-    sameIdSet(priorSnapshot.sourceEntryIds, changeBrief.sourceEntryIds);
-  if (persistSnapshot && !identicalSources) {
+  if (
+    persistSnapshot &&
+    shouldPersistGeneratedSnapshot(priorSnapshot, changeBrief)
+  ) {
     snapshot = await saveBriefSnapshot(
       snapshotFromChangeBrief(changeBrief, {
         now: new Date(),
@@ -180,6 +176,48 @@ export async function generateSessionBriefArtifact({
   });
 
   return record;
+}
+
+export async function saveClinicianCorrectedSnapshot({
+  changeBrief,
+  edits = {},
+  record = null,
+  now = new Date(),
+} = {}) {
+  if (!changeBrief) {
+    const error = new Error(
+      "Generate a Session Brief before saving corrections."
+    );
+    error.code = "NO_BRIEF";
+    throw error;
+  }
+  const prepared = prepareClinicianCorrectedSnapshot(changeBrief, edits, {
+    now,
+    record,
+  });
+  const snapshot = await saveBriefSnapshot(prepared.snapshot);
+  const nextBrief = {
+    ...prepared.changeBrief,
+    snapshotId: snapshot.id,
+  };
+  const markdown = formatChangeBriefMarkdown(nextBrief, {
+    analysis: record?.analysis,
+    sections: record?.sections,
+  });
+  const savedRecord = await saveSessionBriefRecord({
+    ...(record || {}),
+    mode: record?.mode || prepared.record.mode,
+    warning: record?.warning ?? null,
+    markdown,
+    analysis: record?.analysis,
+    narrative: record?.narrative,
+    sections: record?.sections,
+    rawFallback: record?.rawFallback || "",
+    changeBrief: nextBrief,
+    snapshotId: snapshot.id,
+    priorSnapshotId: nextBrief.priorSnapshotId,
+  });
+  return { changeBrief: nextBrief, snapshot, record: savedRecord };
 }
 
 export async function loadCachedSessionBrief() {
