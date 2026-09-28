@@ -19,8 +19,35 @@ permissions:
   contents: read
 
 jobs:
+  brief-gold:
+    name: Brief gold eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Eval Session Brief gold packs
+        run: |
+          node scripts/eval-brief-gold.mjs
+          node scripts/eval-brief-gold.mjs --self-check-negative
+          node scripts/test-change-brief.js
+          {
+            echo "## Brief gold eval"
+            echo "Local \`buildLocalChangeBrief\` only (no Gemini)."
+            echo "- \`node scripts/eval-brief-gold.mjs\`"
+            echo "- \`node scripts/eval-brief-gold.mjs --self-check-negative\`"
+            echo "- \`node scripts/test-change-brief.js\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'Deploy production' || 'Deploy staging' }}
+    needs: brief-gold
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
