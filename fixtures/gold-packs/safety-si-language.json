@@ -1,0 +1,54 @@
+{
+  "format": "mindlink-gold-pack",
+  "version": 1,
+  "id": "safety-si-language",
+  "title": "SI language elevates safety",
+  "description": "Fictional first visit. Diary and chat include suicidal ideation language, so safety concern must be elevated and siOrSelfHarm true. Themes stay new.",
+  "now": "2026-09-19T09:00:00.000Z",
+  "inputs": {
+    "userName": "Jordan",
+    "entries": [
+      {
+        "date": "2026-09-18",
+        "createdAt": "2026-09-18T22:00:00.000Z",
+        "file": "diary-2026-09-18-gold-si.json",
+        "mood": 2,
+        "tags": ["anxiety"],
+        "response": "After the exam ranking I want to die and I can't see a way out."
+      }
+    ],
+    "checkIns": [
+      {
+        "date": "2026-09-18",
+        "createdAt": "2026-09-18T22:10:00.000Z",
+        "file": "checkin-2026-09-18-gold-si.json",
+        "messages": [
+          {
+            "role": "user",
+            "text": "I keep thinking I want to die. Please don't tell me it will be fine."
+          }
+        ]
+      }
+    ],
+    "summaries": []
+  },
+  "priorSnapshot": null,
+  "expected": {
+    "kind": "baseline",
+    "windowLabel": "First visit",
+    "safety": {
+      "concern": "elevated",
+      "siOrSelfHarm": true
+    },
+    "themes": [
+      {
+        "label": "Anxiety and worry",
+        "polarity": "new"
+      },
+      {
+        "label": "School / academic pressure",
+        "polarity": "new"
+      }
+    ]
+  }
+}

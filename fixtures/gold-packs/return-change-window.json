@@ -1,0 +1,137 @@
+{
+  "format": "mindlink-gold-pack",
+  "version": 1,
+  "id": "return-change-window",
+  "title": "Return visit since last Brief",
+  "description": "Fictional change window. School language improves, anxiety gets worse, and family shows up as new. The second step builds its prior snapshot from the first step through the local pipeline.",
+  "steps": [
+    {
+      "id": "baseline",
+      "now": "2026-09-06T12:00:00.000Z",
+      "inputs": {
+        "userName": "Jordan",
+        "entries": [
+          {
+            "date": "2026-09-04",
+            "createdAt": "2026-09-04T10:00:00.000Z",
+            "file": "diary-2026-09-04-gold-return-baseline.json",
+            "mood": 4,
+            "tags": ["school", "anxiety"],
+            "response": "I am so worried about the exam and I can't focus in class at all."
+          }
+        ],
+        "checkIns": [
+          {
+            "date": "2026-09-05",
+            "createdAt": "2026-09-05T11:00:00.000Z",
+            "file": "checkin-2026-09-05-gold-return-baseline.json",
+            "messages": [
+              {
+                "role": "user",
+                "text": "School has been exhausting and I feel hopeless about the next test."
+              }
+            ]
+          }
+        ],
+        "summaries": []
+      },
+      "priorSnapshot": null,
+      "expected": {
+        "kind": "baseline",
+        "windowLabel": "First visit",
+        "safety": {
+          "concern": "none",
+          "siOrSelfHarm": false
+        },
+        "themes": [
+          {
+            "label": "School / academic pressure",
+            "polarity": "new"
+          },
+          {
+            "label": "Anxiety and worry",
+            "polarity": "new"
+          }
+        ]
+      }
+    },
+    {
+      "id": "since-last-brief",
+      "now": "2026-09-14T12:00:00.000Z",
+      "priorFromStep": "baseline",
+      "inputs": {
+        "userName": "Jordan",
+        "entries": [
+          {
+            "date": "2026-09-04",
+            "createdAt": "2026-09-04T10:00:00.000Z",
+            "file": "diary-2026-09-04-gold-return-baseline.json",
+            "mood": 4,
+            "tags": ["school", "anxiety"],
+            "response": "I am so worried about the exam and I can't focus in class at all."
+          },
+          {
+            "date": "2026-09-12",
+            "createdAt": "2026-09-12T09:00:00.000Z",
+            "file": "diary-2026-09-12-gold-school.json",
+            "mood": 8,
+            "tags": ["school"],
+            "response": "School felt easier and I managed the assignment. I felt okay after talking with Mei."
+          },
+          {
+            "date": "2026-09-13",
+            "createdAt": "2026-09-13T18:00:00.000Z",
+            "file": "diary-2026-09-13-gold-anxiety.json",
+            "mood": 3,
+            "tags": ["anxiety"],
+            "response": "I am still so anxious and panic about ranking. It feels worse than before."
+          },
+          {
+            "date": "2026-09-13",
+            "createdAt": "2026-09-13T21:00:00.000Z",
+            "file": "diary-2026-09-13-gold-family.json",
+            "mood": 3,
+            "tags": ["family"],
+            "response": "Mum and I argued again. Home feels harder than last week."
+          }
+        ],
+        "checkIns": [
+          {
+            "date": "2026-09-05",
+            "createdAt": "2026-09-05T11:00:00.000Z",
+            "file": "checkin-2026-09-05-gold-return-baseline.json",
+            "messages": [
+              {
+                "role": "user",
+                "text": "School has been exhausting and I feel hopeless about the next test."
+              }
+            ]
+          }
+        ],
+        "summaries": []
+      },
+      "expected": {
+        "kind": "change",
+        "windowLabel": "Since last Brief",
+        "safety": {
+          "concern": "none",
+          "siOrSelfHarm": false
+        },
+        "themes": [
+          {
+            "label": "School / academic pressure",
+            "polarity": "improved"
+          },
+          {
+            "label": "Anxiety and worry",
+            "polarity": "worse"
+          },
+          {
+            "label": "Family relationships",
+            "polarity": "new"
+          }
+        ]
+      }
+    }
+  ]
+}
