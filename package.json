@@ -15,6 +15,7 @@
     "test:change-brief": "node scripts/test-change-brief.js",
     "test:brief-gold": "node scripts/eval-brief-gold.mjs",
     "test:clinician-brief-edit": "node scripts/verify-clinician-brief-edit.mjs --snapshot && node scripts/verify-clinician-brief-edit.mjs --return-path",
+    "test:brief-edit-prefs": "node scripts/verify-brief-edit-prefs.mjs --log && node scripts/verify-brief-edit-prefs.mjs --inject",
     "test:teen-week": "node scripts/test-teen-week.js",
     "test:theme": "node scripts/test-theme.js",
     "test:gemini-client": "node scripts/test-gemini-client.mjs",
