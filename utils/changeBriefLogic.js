@@ -116,6 +116,24 @@ function stripInventedScales(text) {
     .trim();
 }
 
+function clipClinicianNote(value) {
+  return stripInventedScales(value).slice(0, 500);
+}
+
+function asThemeIndex(value) {
+  if (Number.isInteger(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+  return null;
+}
+
+function sameIdSet(left = [], right = []) {
+  const a = left || [];
+  const b = right || [];
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
+}
+
 function walkStrings(value, fn) {
   if (typeof value === "string") return fn(value);
   if (Array.isArray(value)) return value.map((item) => walkStrings(item, fn));
@@ -1027,7 +1045,122 @@ function normalizeSnapshot(raw = {}) {
     sourceEntryIds: uniqueStrings(raw.sourceEntryIds),
     moodSummary: raw.moodSummary || null,
     tagFrequency: raw.tagFrequency || {},
+    clinicianNote: clipClinicianNote(raw.clinicianNote),
   };
+}
+
+function applyClinicianBriefEdits(changeBrief, edits = {}) {
+  const source =
+    changeBrief && typeof changeBrief === "object"
+      ? changeBrief
+      : emptyChangeBrief();
+  const original = (source.themes || [])
+    .map((theme) => normalizeTheme(theme))
+    .filter(Boolean);
+  const removeIndexes = new Set(
+    (Array.isArray(edits.removeIndexes) ? edits.removeIndexes : [])
+      .map(asThemeIndex)
+      .filter((index) => index != null)
+  );
+  const patchByIndex = new Map();
+  (Array.isArray(edits.themes) ? edits.themes : []).forEach((edit, fallback) => {
+    if (!edit || typeof edit !== "object") return;
+    let index = asThemeIndex(edit.index);
+    if (index == null && edit.label) {
+      const label = asText(edit.label).toLowerCase();
+      index = original.findIndex((theme) => theme.label.toLowerCase() === label);
+    }
+    if (index == null) index = fallback;
+    if (index < 0 || index >= original.length) return;
+    patchByIndex.set(index, edit);
+  });
+
+  const themes = [];
+  original.forEach((theme, index) => {
+    if (removeIndexes.has(index)) return;
+    const edit = patchByIndex.get(index);
+    if (!edit) {
+      themes.push(theme);
+      return;
+    }
+    const requested = asText(edit.polarity).toLowerCase();
+    if (edit.drop === true || requested === "drop") return;
+    let claim = theme.claim;
+    if (edit.claim != null) {
+      const cleaned = stripInventedScales(edit.claim);
+      if (cleaned) claim = cleaned;
+    }
+    themes.push({
+      label: theme.label,
+      polarity:
+        requested && requested !== "drop"
+          ? normalizePolarity(requested)
+          : theme.polarity,
+      claim,
+      evidence: theme.evidence,
+    });
+  });
+
+  const clinicianNote =
+    edits.clinicianNote != null
+      ? clipClinicianNote(edits.clinicianNote)
+      : clipClinicianNote(source.clinicianNote);
+
+  return {
+    kind: source.kind === "change" ? "change" : source.kind || "baseline",
+    windowLabel: source.windowLabel,
+    windowStart: source.windowStart || null,
+    windowEnd: source.windowEnd || null,
+    emptyWindow: Boolean(source.emptyWindow),
+    safetySummary: normalizeSafetySummary(source.safetySummary),
+    themes,
+    presentingConcerns: source.presentingConcerns || [],
+    unknowns: source.unknowns || [],
+    sessionFocus: source.sessionFocus || [],
+    sourceEntryIds: source.sourceEntryIds || [],
+    moodSummary: source.moodSummary ?? null,
+    tagFrequency: { ...(source.tagFrequency || {}) },
+    clinicianNote,
+    snapshotId: source.snapshotId || null,
+    priorSnapshotId: source.priorSnapshotId || null,
+    clinicianCorrected: true,
+  };
+}
+
+function saveClinicianCorrectedSnapshot(
+  changeBrief,
+  edits = {},
+  { id, createdAt, now = new Date(), record = null } = {}
+) {
+  const edited = applyClinicianBriefEdits(changeBrief, edits);
+  const snapshot = snapshotFromChangeBrief(edited, { id, createdAt, now });
+  const nextBrief = {
+    ...edited,
+    snapshotId: snapshot.id || edited.snapshotId || null,
+  };
+  const markdown = formatChangeBriefMarkdown(nextBrief, {
+    analysis: record?.analysis,
+    sections: record?.sections,
+  });
+  const savedRecord = {
+    ...(record || {}),
+    mode: record?.mode || "local-demo",
+    markdown,
+    changeBrief: nextBrief,
+    snapshotId: nextBrief.snapshotId,
+    priorSnapshotId:
+      nextBrief.priorSnapshotId || record?.priorSnapshotId || null,
+  };
+  return { changeBrief: nextBrief, snapshot, record: savedRecord };
+}
+
+function shouldPersistGeneratedSnapshot(priorSnapshot, changeBrief) {
+  if (!changeBrief) return false;
+  if (!priorSnapshot) return true;
+  return !sameIdSet(
+    priorSnapshot.sourceEntryIds,
+    changeBrief.sourceEntryIds
+  );
 }
 
 function snapshotFromChangeBrief(changeBrief, { id, createdAt, now = new Date() } = {}) {
@@ -1039,6 +1172,7 @@ function snapshotFromChangeBrief(changeBrief, { id, createdAt, now = new Date() 
     createdAt: stamp,
     windowStart: normalized.windowStart,
     windowEnd: normalized.windowEnd || stamp,
+    clinicianNote: changeBrief?.clinicianNote,
   });
 }
 
@@ -1059,6 +1193,7 @@ function formatChangeBriefMarkdown(changeBrief, { analysis, sections } = {}) {
   const improved = themesByPolarity(brief.themes, "improved");
   const worse = themesByPolarity(brief.themes, "worse");
   const newer = themesByPolarity(brief.themes, "new");
+  const stable = themesByPolarity(brief.themes, "stable");
   const lines = [
     `# Session Brief`,
     `Window: ${brief.windowLabel}`,
@@ -1080,7 +1215,11 @@ function formatChangeBriefMarkdown(changeBrief, { analysis, sections } = {}) {
       ...(brief.presentingConcerns || []).map((item) => `- ${item}`),
       "",
       `## Themes`,
-      ...(brief.themes || []).map((theme) => `- ${theme.claim}`),
+      ...(brief.themes || []).map((theme) =>
+        theme.polarity && theme.polarity !== "new"
+          ? `- ${theme.claim} (${theme.polarity})`
+          : `- ${theme.claim}`
+      ),
       "",
       `## Unknowns`,
       ...(brief.unknowns || []).map((item) => `- ${item}`)
@@ -1102,6 +1241,9 @@ function formatChangeBriefMarkdown(changeBrief, { analysis, sections } = {}) {
     sectionBlock("Improved", improved, "None noted in this window.");
     sectionBlock("Harder or stuck", worse, "None noted in this window.");
     sectionBlock("New since last time", newer, "None noted in this window.");
+    if (stable.length) {
+      sectionBlock("Stable", stable, "None held as stable.");
+    }
   }
 
   lines.push(
@@ -1109,6 +1251,10 @@ function formatChangeBriefMarkdown(changeBrief, { analysis, sections } = {}) {
     `## Session focus`,
     ...(brief.sessionFocus || []).map((item) => `- ${item}`)
   );
+
+  if (asText(brief.clinicianNote)) {
+    lines.push("", "## Clinician note", brief.clinicianNote);
+  }
 
   if (sections) {
     lines.push(
@@ -1179,6 +1325,7 @@ ${JSON.stringify(
           sessionFocus: priorSnapshot.sessionFocus,
           moodSummary: priorSnapshot.moodSummary,
           tagFrequency: priorSnapshot.tagFrequency,
+          clinicianNote: priorSnapshot.clinicianNote || "",
         }
       : null,
     null,
@@ -1220,6 +1367,9 @@ module.exports = {
   mergeChangeBrief,
   normalizeSnapshot,
   snapshotFromChangeBrief,
+  applyClinicianBriefEdits,
+  saveClinicianCorrectedSnapshot,
+  shouldPersistGeneratedSnapshot,
   themesByPolarity,
   formatChangeBriefMarkdown,
   buildChangeBriefPrompt,
