@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import { buildDiaryRecord, parseDiaryRecord } from "./sessionBriefLogic";
+import { normalizeBriefEditRecord } from "./changeBriefLogic";
 import {
   DEMO_PACK_ASYNC_KEYS,
   RECORD_PREFIXES,
@@ -321,6 +322,35 @@ export async function getLatestBriefSnapshot() {
   } catch {
     return null;
   }
+}
+
+export async function saveBriefEditRecord(record) {
+  const normalized = normalizeBriefEditRecord(record);
+  if (!normalized) {
+    throw new Error("Brief edit record is empty.");
+  }
+  const fileName = `${normalized.id}.json`;
+  await writeFile(fileName, JSON.stringify(normalized));
+  return { ...normalized, fileName };
+}
+
+export async function listBriefEditRecords() {
+  const files = await listKeys("briefEdit-", ".json");
+  const records = [];
+  for (const file of files) {
+    try {
+      const raw = await readFile(file);
+      if (!raw) continue;
+      const normalized = normalizeBriefEditRecord(JSON.parse(raw));
+      if (normalized) records.push(normalized);
+    } catch (error) {
+      console.error("Failed to parse brief edit record:", file, error);
+    }
+  }
+  records.sort((left, right) =>
+    String(left.savedAt || "").localeCompare(String(right.savedAt || ""))
+  );
+  return records;
 }
 
 export async function listBriefSnapshots() {

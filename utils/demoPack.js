@@ -21,6 +21,7 @@ const RECORD_PREFIXES = [
   "userReport-",
   "sessionBrief-",
   "briefSnapshot-",
+  "briefEdit-",
 ];
 
 const DEMO_PACK_ASYNC_KEYS = [
@@ -70,6 +71,7 @@ function isRecordName(name) {
   if (base.startsWith("checkin-")) return base.endsWith(".json");
   if (base.startsWith("sessionBrief-")) return base.endsWith(".json");
   if (base.startsWith("briefSnapshot-")) return base.endsWith(".json");
+  if (base.startsWith("briefEdit-")) return base.endsWith(".json");
   return false;
 }
 

@@ -835,33 +835,37 @@ function buildLocalChangeBrief({
   priorSnapshot = null,
   now = new Date(),
   windowMode = "last-brief",
+  preferences = null,
 } = {}) {
   const analysis = analyzeLocalSignals(inputs);
   const items = collectEvidenceItems(inputs);
+  let brief;
   if (!priorSnapshot) {
-    return buildBaselineBrief({ inputs, analysis, items, now });
-  }
-  const windowInputs =
-    windowMode === "last-week"
-      ? filterInputsSinceLastWeek(inputs, now)
-      : filterInputsSinceSnapshot(inputs, priorSnapshot);
-  const windowAnalysis = analyzeLocalSignals({
-    ...windowInputs,
-    userName: inputs.userName,
-  });
-  const windowItems = collectEvidenceItems(windowInputs);
-  return buildReturnBrief({
-    inputs,
-    priorSnapshot: normalizeSnapshot(priorSnapshot),
-    windowInputs,
-    windowAnalysis,
-    windowItems,
-    now,
-    windowLabel:
+    brief = buildBaselineBrief({ inputs, analysis, items, now });
+  } else {
+    const windowInputs =
       windowMode === "last-week"
-        ? WINDOW_LABELS.sinceLastWeek
-        : WINDOW_LABELS.sinceLastBrief,
-  });
+        ? filterInputsSinceLastWeek(inputs, now)
+        : filterInputsSinceSnapshot(inputs, priorSnapshot);
+    const windowAnalysis = analyzeLocalSignals({
+      ...windowInputs,
+      userName: inputs.userName,
+    });
+    const windowItems = collectEvidenceItems(windowInputs);
+    brief = buildReturnBrief({
+      inputs,
+      priorSnapshot: normalizeSnapshot(priorSnapshot),
+      windowInputs,
+      windowAnalysis,
+      windowItems,
+      now,
+      windowLabel:
+        windowMode === "last-week"
+          ? WINDOW_LABELS.sinceLastWeek
+          : WINDOW_LABELS.sinceLastBrief,
+    });
+  }
+  return applyBriefPreferences(brief, preferences);
 }
 
 function themesFromParsed(parsed) {
@@ -1049,14 +1053,23 @@ function normalizeSnapshot(raw = {}) {
   };
 }
 
-function applyClinicianBriefEdits(changeBrief, edits = {}) {
-  const source =
-    changeBrief && typeof changeBrief === "object"
-      ? changeBrief
-      : emptyChangeBrief();
-  const original = (source.themes || [])
-    .map((theme) => normalizeTheme(theme))
-    .filter(Boolean);
+const BRIEF_EDIT_PREFIX = "briefEdit-";
+const MAX_PREFERENCE_RECORDS = 8;
+
+function briefEditIdFromStamp(savedAt) {
+  const parsed = savedAt instanceof Date ? savedAt : new Date(savedAt);
+  const when = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const year = when.getUTCFullYear();
+  const month = String(when.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(when.getUTCDate()).padStart(2, "0");
+  const hours = String(when.getUTCHours()).padStart(2, "0");
+  const minutes = String(when.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(when.getUTCSeconds()).padStart(2, "0");
+  const ms = String(when.getUTCMilliseconds()).padStart(3, "0");
+  return `${BRIEF_EDIT_PREFIX}${year}-${month}-${day}-${hours}${minutes}${seconds}${ms}`;
+}
+
+function indexClinicianThemeEdits(original, edits = {}) {
   const removeIndexes = new Set(
     (Array.isArray(edits.removeIndexes) ? edits.removeIndexes : [])
       .map(asThemeIndex)
@@ -1074,23 +1087,23 @@ function applyClinicianBriefEdits(changeBrief, edits = {}) {
     if (index < 0 || index >= original.length) return;
     patchByIndex.set(index, edit);
   });
+  return { removeIndexes, patchByIndex };
+}
 
-  const themes = [];
-  original.forEach((theme, index) => {
-    if (removeIndexes.has(index)) return;
-    const edit = patchByIndex.get(index);
-    if (!edit) {
-      themes.push(theme);
-      return;
-    }
-    const requested = asText(edit.polarity).toLowerCase();
-    if (edit.drop === true || requested === "drop") return;
-    let claim = theme.claim;
-    if (edit.claim != null) {
-      const cleaned = stripInventedScales(edit.claim);
-      if (cleaned) claim = cleaned;
-    }
-    themes.push({
+function nextThemeFromEdit(theme, edit) {
+  if (!edit) return { drop: false, theme };
+  const requested = asText(edit.polarity).toLowerCase();
+  if (edit.drop === true || requested === "drop") {
+    return { drop: true, theme: null };
+  }
+  let claim = theme.claim;
+  if (edit.claim != null) {
+    const cleaned = stripInventedScales(edit.claim);
+    if (cleaned) claim = cleaned;
+  }
+  return {
+    drop: false,
+    theme: {
       label: theme.label,
       polarity:
         requested && requested !== "drop"
@@ -1098,7 +1111,29 @@ function applyClinicianBriefEdits(changeBrief, edits = {}) {
           : theme.polarity,
       claim,
       evidence: theme.evidence,
-    });
+    },
+  };
+}
+
+function applyClinicianBriefEdits(changeBrief, edits = {}) {
+  const source =
+    changeBrief && typeof changeBrief === "object"
+      ? changeBrief
+      : emptyChangeBrief();
+  const original = (source.themes || [])
+    .map((theme) => normalizeTheme(theme))
+    .filter(Boolean);
+  const { removeIndexes, patchByIndex } = indexClinicianThemeEdits(
+    original,
+    edits
+  );
+
+  const themes = [];
+  original.forEach((theme, index) => {
+    if (removeIndexes.has(index)) return;
+    const next = nextThemeFromEdit(theme, patchByIndex.get(index));
+    if (next.drop || !next.theme) return;
+    themes.push(next.theme);
   });
 
   const clinicianNote =
@@ -1273,6 +1308,295 @@ function formatChangeBriefMarkdown(changeBrief, { analysis, sections } = {}) {
   return lines.filter((line) => line !== undefined).join("\n");
 }
 
+function themeEvidenceText(theme) {
+  return (theme?.evidence || []).map((item) => item?.text || "").join(" ");
+}
+
+function evidenceTone(text) {
+  return {
+    improved: IMPROVED_RE.test(text || ""),
+    worse: WORSE_RE.test(text || ""),
+  };
+}
+
+function evidenceContradictsPolarity(polarity, text) {
+  const tone = evidenceTone(text);
+  if (polarity === "improved") return tone.worse && !tone.improved;
+  if (polarity === "worse") return tone.improved && !tone.worse;
+  if (polarity === "stable" || polarity === "new") return tone.improved || tone.worse;
+  return false;
+}
+
+function evidenceAgreesWithPolarity(polarity, text) {
+  const tone = evidenceTone(text);
+  if (polarity === "improved") return tone.improved && !tone.worse;
+  if (polarity === "worse") return tone.worse && !tone.improved;
+  return false;
+}
+
+function hintMatchesTheme(hint, theme) {
+  if (!hint || !theme) return false;
+  const def = themeDefForLabel(theme.label);
+  if (hint.themeId && def && hint.themeId === def.id) return true;
+  const hintLabel = asText(hint.label).toLowerCase();
+  if (hintLabel && hintLabel === asText(theme.label).toLowerCase()) return true;
+  if (hint.themeId && asText(theme.label).toLowerCase() === hint.themeId) return true;
+  return false;
+}
+
+function normalizeBriefEditCorrection(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const label = stripInventedScales(raw.label);
+  if (!label) return null;
+  const drop = raw.drop === true;
+  const beforePolarity = normalizePolarity(raw.beforePolarity || "stable");
+  const afterRaw = asText(raw.afterPolarity).toLowerCase();
+  const afterPolarity = drop
+    ? null
+    : POLARITIES.includes(afterRaw)
+      ? normalizePolarity(afterRaw)
+      : null;
+  if (!drop && !afterPolarity) return null;
+  const themeId =
+    themeDefForLabel(raw.themeId || label)?.id || themeDefForLabel(label)?.id || null;
+  return {
+    themeId,
+    label: themeDefForLabel(label)?.label || label,
+    beforePolarity,
+    beforeClaim: stripInventedScales(raw.beforeClaim),
+    afterPolarity,
+    afterClaim: drop ? "" : stripInventedScales(raw.afterClaim),
+    drop,
+  };
+}
+
+function normalizeBriefEditRecord(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const corrections = (Array.isArray(raw.corrections) ? raw.corrections : [])
+    .map(normalizeBriefEditCorrection)
+    .filter(Boolean);
+  const note = clipClinicianNote(raw.note);
+  if (!corrections.length && !note) return null;
+  const savedAtDate = new Date(raw.savedAt || Date.now());
+  const savedAt = Number.isNaN(savedAtDate.getTime())
+    ? new Date().toISOString()
+    : savedAtDate.toISOString();
+  let id = asText(raw.id);
+  if (!/^briefEdit-[A-Za-z0-9-]+$/.test(id)) {
+    id = briefEditIdFromStamp(savedAt);
+  }
+  return {
+    id,
+    savedAt,
+    snapshotId: asText(raw.snapshotId) || null,
+    note,
+    corrections,
+  };
+}
+
+function buildBriefCorrectionRecord(
+  changeBrief,
+  edits = {},
+  { id, savedAt, snapshotId } = {}
+) {
+  const source =
+    changeBrief && typeof changeBrief === "object"
+      ? changeBrief
+      : emptyChangeBrief();
+  const original = (source.themes || [])
+    .map((theme) => normalizeTheme(theme))
+    .filter(Boolean);
+  const { removeIndexes, patchByIndex } = indexClinicianThemeEdits(
+    original,
+    edits
+  );
+  const corrections = [];
+  original.forEach((theme, index) => {
+    const removed = removeIndexes.has(index);
+    const edit = patchByIndex.get(index);
+    const next = removed ? { drop: true, theme: null } : nextThemeFromEdit(theme, edit);
+    const changed =
+      next.drop ||
+      (next.theme &&
+        (next.theme.polarity !== theme.polarity || next.theme.claim !== theme.claim));
+    if (!changed) return;
+    const def = themeDefForLabel(theme.label);
+    corrections.push({
+      themeId: def?.id || null,
+      label: theme.label,
+      beforePolarity: theme.polarity,
+      beforeClaim: stripInventedScales(theme.claim),
+      afterPolarity: next.drop ? null : next.theme.polarity,
+      afterClaim: next.drop ? "" : stripInventedScales(next.theme.claim),
+      drop: next.drop,
+    });
+  });
+  const beforeNote = clipClinicianNote(source.clinicianNote);
+  const afterNote =
+    edits.clinicianNote != null
+      ? clipClinicianNote(edits.clinicianNote)
+      : beforeNote;
+  const noteChanged = beforeNote !== afterNote;
+  if (!corrections.length && (!noteChanged || !afterNote)) return null;
+  const whenDate = savedAt ? new Date(savedAt) : new Date();
+  const when = Number.isNaN(whenDate.getTime()) ? new Date() : whenDate;
+  const record = {
+    id: id || briefEditIdFromStamp(when),
+    savedAt: when.toISOString(),
+    snapshotId: asText(snapshotId) || null,
+    note: afterNote,
+    corrections,
+  };
+  return normalizeBriefEditRecord(record);
+}
+
+function buildBriefPreferenceContext(records) {
+  const list = (Array.isArray(records) ? records : [])
+    .map(normalizeBriefEditRecord)
+    .filter(Boolean)
+    .sort((left, right) => String(left.savedAt).localeCompare(String(right.savedAt)))
+    .slice(-MAX_PREFERENCE_RECORDS);
+  if (!list.length) {
+    return { empty: true, bullets: [], hints: [], text: "" };
+  }
+  const latest = new Map();
+  list.forEach((record) => {
+    record.corrections.forEach((item) => {
+      const key = item.themeId || item.label.toLowerCase();
+      latest.set(key, item);
+    });
+  });
+  const bullets = [];
+  const hints = [];
+  latest.forEach((item) => {
+    if (item.drop) {
+      bullets.push(
+        `Last time the clinician removed ${item.label} (was ${item.beforePolarity}). Omit it unless new evidence in this window names it.`
+      );
+      hints.push({
+        themeId: item.themeId,
+        label: item.label,
+        drop: true,
+        polarity: null,
+        claim: "",
+      });
+      return;
+    }
+    const claimBit = item.afterClaim
+      ? ` and rewrote the claim to “${clipQuote(item.afterClaim, 180)}”`
+      : "";
+    bullets.push(
+      `Last time the clinician changed ${item.label} from ${item.beforePolarity} to ${item.afterPolarity}${claimBit}. Prefer similar framing when evidence matches.`
+    );
+    hints.push({
+      themeId: item.themeId,
+      label: item.label,
+      drop: false,
+      polarity: item.afterPolarity,
+      claim: item.afterClaim,
+    });
+  });
+  const notes = [];
+  [...list].reverse().forEach((record) => {
+    const note = asText(record.note).replace(/\s+/g, " ");
+    if (!note || notes.includes(note) || notes.length >= 3) return;
+    notes.push(note);
+  });
+  notes.forEach((note) => {
+    bullets.push(`Clinician note to keep in mind: ${clipQuote(note, 240)}`);
+  });
+  if (!bullets.length) {
+    return { empty: true, bullets: [], hints: [], text: "" };
+  }
+  return {
+    empty: false,
+    bullets,
+    hints,
+    text: bullets.map((line) => `- ${line}`).join("\n"),
+  };
+}
+
+function applyBriefPreferences(changeBrief, preferences) {
+  if (!changeBrief || typeof changeBrief !== "object") return changeBrief;
+  const context =
+    preferences && typeof preferences === "object" && !Array.isArray(preferences)
+      ? preferences
+      : null;
+  if (!context || context.empty) return changeBrief;
+  const hints = Array.isArray(context.hints) ? context.hints : [];
+  if (!hints.length) return changeBrief;
+  const safetySummary = changeBrief.safetySummary;
+  let changed = false;
+  const themes = [];
+  (changeBrief.themes || []).forEach((theme) => {
+    const hint = hints.find((item) => hintMatchesTheme(item, theme));
+    if (!hint) {
+      themes.push(theme);
+      return;
+    }
+    const text = themeEvidenceText(theme);
+    const tone = evidenceTone(text);
+    const strong = tone.improved || tone.worse;
+    if (hint.drop) {
+      if (changeBrief.kind === "change" && !strong) {
+        changed = true;
+        return;
+      }
+      themes.push(theme);
+      return;
+    }
+    if (!hint.polarity || hint.polarity === theme.polarity) {
+      themes.push(theme);
+      return;
+    }
+    const baselineAgrees =
+      changeBrief.kind !== "baseline" ||
+      evidenceAgreesWithPolarity(hint.polarity, text);
+    if (!baselineAgrees || evidenceContradictsPolarity(hint.polarity, text)) {
+      themes.push(theme);
+      return;
+    }
+    const def = themeDefForLabel(theme.label);
+    const claim = def
+      ? claimForTheme(def, hint.polarity, changeBrief.moodSummary)
+      : theme.claim;
+    changed = true;
+    themes.push({
+      ...theme,
+      polarity: hint.polarity,
+      claim,
+    });
+  });
+  if (!changed) return changeBrief;
+  return {
+    ...changeBrief,
+    themes,
+    sessionFocus: buildSessionFocus({
+      kind: changeBrief.kind,
+      safety: safetySummary,
+      themes,
+      unknowns: changeBrief.unknowns,
+    }),
+    safetySummary,
+    moodSummary: changeBrief.moodSummary ?? null,
+  };
+}
+
+function formatPreferenceBlock(preferences) {
+  if (!preferences || typeof preferences !== "object" || preferences.empty) {
+    return "";
+  }
+  const lines = (Array.isArray(preferences.bullets) ? preferences.bullets : [])
+    .map((line) => asText(line).replace(/\s+/g, " "))
+    .filter(Boolean);
+  if (!lines.length) return "";
+  return `Clinician preference memory (soft guidance from saved corrections — not evidence, not a diagnosis, and not a scale score):
+${lines.map((line) => `- ${line}`).join("\n")}
+Honor a preference only when evidence candidates support that theme. If evidence contradicts it, follow the evidence. Do not invent suicidal-ideation flags, self-harm flags, or HAM-D, HAM-A, PHQ, GAD, BDI, or SBQ scores from these preferences.
+
+`;
+}
+
 function buildChangeBriefPrompt({
   kind,
   priorSnapshot,
@@ -1280,7 +1604,9 @@ function buildChangeBriefPrompt({
   windowAnalysis,
   evidenceCandidates,
   windowLabel,
+  preferences = null,
 }) {
+  const preferenceBlock = formatPreferenceBlock(preferences);
   return `Write a change-over-time clinician Session Brief using ONLY this on-device evidence. Do not invent biography, diagnoses, events, or quotes.
 
 Rules:
@@ -1314,7 +1640,7 @@ Required JSON shape:
   "sessionFocus": ["", "", ""]
 }
 
-Prior snapshot (may be null on first visit):
+${preferenceBlock}Prior snapshot (may be null on first visit):
 ${JSON.stringify(
     priorSnapshot
       ? {
@@ -1370,6 +1696,11 @@ module.exports = {
   applyClinicianBriefEdits,
   saveClinicianCorrectedSnapshot,
   shouldPersistGeneratedSnapshot,
+  BRIEF_EDIT_PREFIX,
+  buildBriefCorrectionRecord,
+  normalizeBriefEditRecord,
+  buildBriefPreferenceContext,
+  applyBriefPreferences,
   themesByPolarity,
   formatChangeBriefMarkdown,
   buildChangeBriefPrompt,

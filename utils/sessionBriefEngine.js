@@ -15,6 +15,8 @@ import {
   hasEnoughBriefData,
 } from "./sessionBriefLogic";
 import {
+  buildBriefCorrectionRecord,
+  buildBriefPreferenceContext,
   buildChangeBriefPrompt,
   buildLocalChangeBrief,
   collectEvidenceItems,
@@ -33,6 +35,8 @@ import {
   getLatestBriefSnapshot,
   getLatestSessionBriefRecord,
   getUserName,
+  listBriefEditRecords,
+  saveBriefEditRecord,
   saveBriefSnapshot,
   saveSessionBriefRecord,
 } from "./localData";
@@ -43,6 +47,15 @@ function applyMoodConstraintToSections(sections) {
     next[key] = constrainMoodScaleLanguage(value);
   });
   return next;
+}
+
+async function loadBriefPreferenceContext() {
+  try {
+    return buildBriefPreferenceContext(await listBriefEditRecords());
+  } catch (error) {
+    console.error("Failed to load Brief edit preferences:", error);
+    return buildBriefPreferenceContext([]);
+  }
 }
 
 function windowInputsForBrief(inputs, priorSnapshot, windowMode) {
@@ -80,6 +93,7 @@ export async function generateSessionBriefArtifact({
   }
 
   const priorSnapshot = await getLatestBriefSnapshot();
+  const preferences = await loadBriefPreferenceContext();
   const analysis = analyzeLocalSignals(inputs);
   const scopedInputs = windowInputsForBrief(inputs, priorSnapshot, windowMode);
   const windowAnalysis = priorSnapshot
@@ -93,6 +107,7 @@ export async function generateSessionBriefArtifact({
     inputs,
     priorSnapshot,
     windowMode,
+    preferences,
   });
 
   let changeBrief = localChange;
@@ -114,6 +129,7 @@ export async function generateSessionBriefArtifact({
           windowAnalysis,
           evidenceCandidates,
           windowLabel: localChange.windowLabel,
+          preferences,
         }),
         systemInstruction,
         task: "brief",
@@ -196,6 +212,17 @@ export async function saveClinicianCorrectedSnapshot({
     record,
   });
   const snapshot = await saveBriefSnapshot(prepared.snapshot);
+  const savedAt =
+    now instanceof Date && !Number.isNaN(now.getTime())
+      ? now.toISOString()
+      : new Date().toISOString();
+  const correction = buildBriefCorrectionRecord(changeBrief, edits, {
+    savedAt,
+    snapshotId: snapshot.id,
+  });
+  if (correction) {
+    await saveBriefEditRecord(correction);
+  }
   const nextBrief = {
     ...prepared.changeBrief,
     snapshotId: snapshot.id,

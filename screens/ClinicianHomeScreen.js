@@ -416,7 +416,7 @@ export default function ClinicianHomeScreen() {
       if (result.record?.analysis) setAnalysis(result.record.analysis);
       setEditing(false);
       setSaveStatus(
-        "Corrections saved. The next Brief compares against this snapshot."
+        "Corrections saved. The next Brief compares against this snapshot and uses these edits as soft preferences."
       );
     } catch (err) {
       setError(err.message || "Could not save corrections.");
