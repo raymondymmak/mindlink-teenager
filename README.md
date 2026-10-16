@@ -4,7 +4,7 @@ Created by Raymond Mak and the MindLink team.
 
 ## Overview
 
-MindLink is a mobile application designed to serve as a compassionate and supportive mental wellness assistant specifically for Hong Kong teenagers. It helps teenagers articulate symptoms and helps psychiatrists understand them. Test it out at [raymondmak-app1.expo.app](url).
+MindLink is a mobile application designed to serve as a compassionate and supportive mental wellness assistant specifically for Hong Kong teenagers. It helps teenagers articulate symptoms and helps psychiatrists understand them. Test it out at [raymondymmak-mindlink.expo.app](https://raymondymmak-mindlink.expo.app).
 
 **Demo only — not medical advice or a substitute for care.** Designed for clinician dry-runs and teen wellness demos; on-device demo data is fictional.
 
@@ -55,7 +55,7 @@ Those two commands run in-process against the storage helpers (no browser). Opti
 
 ```bash
 DEMO_PACK_BASE_URL=http://127.0.0.1:8081 node scripts/verify-demo-pack.mjs --roundtrip --browser
-STAGING_BASE_URL=https://raymondmak-app1--staging.expo.app node scripts/verify-demo-pack.mjs --expect-loaded --browser
+STAGING_BASE_URL=https://raymondymmak-mindlink--staging.expo.app node scripts/verify-demo-pack.mjs --expect-loaded --browser
 ```
 
 `npm install --no-save playwright && npx playwright install chromium` once in that environment. Playwright is not a project dependency, so the EAS deploy install stays the same.
@@ -96,7 +96,7 @@ Both `/api/gemini` and `/api/context` require `Authorization: Bearer <MINDLINK_A
 
 EAS Hosting serves the SPA HTML for `GET /api/*`, so configured-ness is a POST like generate. `GET /api/gemini` still works in local Metro.
 
-On web, the client calls same-origin `/api/gemini`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/gemini` unless `EXPO_PUBLIC_GEMINI_API_URL` is set. Demo mode is decided by that health check, not by shipping the key to the browser.
+On web, the client calls same-origin `/api/gemini`. Native / Node defaults to `https://raymondymmak-mindlink.expo.app/api/gemini` unless `EXPO_PUBLIC_GEMINI_API_URL` is set. Demo mode is decided by that health check, not by shipping the key to the browser.
 
 **Deploy is CI-first:** [DEPLOY.md](./DEPLOY.md). Pull requests deploy **staging**; merges to `main` deploy **production**. Cursor agents must not run `eas deploy --prod`. Unset `EXPO_PUBLIC_GEMINI_API_KEY` before `npx expo export`. Put `GEMINI_KEY` on the EAS **preview** (and production) environment as **sensitive**. GitHub Actions needs repo secret `EXPO_TOKEN`.
 
@@ -139,7 +139,7 @@ Set `MINDLINK_API_TOKEN` on EAS preview + production to the same value as `EXPO_
 
 `@react-navigation/native` is pinned to `^7.3.18` so Expo Router's server export can load `createScreenFactory`. The teenager UI is still the existing React Navigation `App.js`, wrapped by a one-route `app/` shell. Nested stack/tab names can appear in the URL; `app/+not-found.js` redirects those reloads to `/`, and the web app pins the address bar to `/` so in-app navigation does not remount the shell.
 
-On web, the client calls same-origin `/api/context`. Native / Node defaults to `https://raymondmak-app1.expo.app/api/context` unless `EXPO_PUBLIC_CONTEXT_API_URL` is set. If the context API is down, chat and brief synthesis continue without RAG.
+On web, the client calls same-origin `/api/context`. Native / Node defaults to `https://raymondymmak-mindlink.expo.app/api/context` unless `EXPO_PUBLIC_CONTEXT_API_URL` is set. If the context API is down, chat and brief synthesis continue without RAG.
 
 This project does **not** depend on `gemini-middleman` for RAG.
 

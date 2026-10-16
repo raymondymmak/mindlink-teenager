@@ -18,7 +18,7 @@
  * Optional browser proof (Playwright). Not required for the commands above.
  * Point it at local Expo web or staging, then pass --browser:
  *   DEMO_PACK_BASE_URL=http://127.0.0.1:8081 node scripts/verify-demo-pack.mjs --roundtrip --browser
- *   STAGING_BASE_URL=https://raymondmak-app1--staging.expo.app node scripts/verify-demo-pack.mjs --expect-loaded --browser
+ *   STAGING_BASE_URL=https://raymondymmak-mindlink--staging.expo.app node scripts/verify-demo-pack.mjs --expect-loaded --browser
  * Install once in the environment that runs the browser (not a project dependency):
  *   npm install --no-save playwright && npx playwright install chromium
  * If Playwright's Chromium build is missing, the script falls back to installed Google Chrome

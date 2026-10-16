@@ -1,6 +1,6 @@
 # EAS Hosting deploy
 
-This Expo app is hosted on [EAS Hosting](https://docs.expo.dev/eas/hosting/deployments-and-aliases/). Preview subdomain: `raymondmak-app1`.
+This Expo app is hosted on [EAS Hosting](https://docs.expo.dev/eas/hosting/deployments-and-aliases/). Preview subdomain: `raymondymmak-mindlink`.
 
 **CI owns staging and production.** Cursor agents open PRs to `main` and do **not** run `eas deploy` (especially never `eas deploy --prod`) unless they are debugging this GitHub Actions workflow.
 
@@ -10,10 +10,10 @@ Workflow: [`.github/workflows/eas-hosting.yml`](./.github/workflows/eas-hosting.
 
 | Trigger | Command | URL |
 | --- | --- | --- |
-| Pull request targeting `main` (or **Actions → EAS Hosting → Run workflow**) | `eas deploy --alias staging --environment preview --non-interactive` | https://raymondmak-app1--staging.expo.app/ |
-| Push / merge to `main` | `eas deploy --prod --environment production --non-interactive` | https://raymondmak-app1.expo.app/ |
+| Pull request targeting `main` (or **Actions → EAS Hosting → Run workflow**) | `eas deploy --alias staging --environment preview --non-interactive` | https://raymondymmak-mindlink--staging.expo.app/ |
+| Push / merge to `main` | `eas deploy --prod --environment production --non-interactive` | https://raymondymmak-mindlink.expo.app/ |
 
-Each deploy also gets a unique preview URL (`https://raymondmak-app1--<deploymentId>.expo.app/`). The `staging` alias is overwritten by the latest PR (or manual) deploy. Production is only updated by CI on `main`.
+Each deploy also gets a unique preview URL (`https://raymondymmak-mindlink--<deploymentId>.expo.app/`). The `staging` alias is overwritten by the latest PR (or manual) deploy. Production is only updated by CI on `main`.
 
 Export always unsets `EXPO_PUBLIC_GEMINI_API_KEY` so Metro cannot embed a client key. Server secrets are applied at deploy time via `--environment` (preview vs production).
 

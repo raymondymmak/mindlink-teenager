@@ -96,7 +96,7 @@ jobs:
           eas deploy --alias staging --environment preview --non-interactive
           {
             echo "## Staging"
-            echo "- Alias: https://raymondmak-app1--staging.expo.app/"
+            echo "- Alias: https://raymondymmak-mindlink--staging.expo.app/"
             echo "- Unique preview URL is in the job log above."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -106,5 +106,5 @@ jobs:
           eas deploy --prod --environment production --non-interactive
           {
             echo "## Production"
-            echo "- https://raymondmak-app1.expo.app/"
+            echo "- https://raymondymmak-mindlink.expo.app/"
           } >> "$GITHUB_STEP_SUMMARY"

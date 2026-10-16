@@ -35,6 +35,10 @@ assert.strictEqual(GEMINI_LITE_MODEL, "gemini-3.5-flash-lite");
 assert.strictEqual(GEMINI_STANDARD_MODEL, "gemini-3.5-flash");
 assert.ok(!GEMINI_LITE_MODEL.includes("2.0-flash"));
 assert.ok(!GEMINI_STANDARD_MODEL.includes("2.0-flash"));
+assert.strictEqual(
+  DEFAULT_GEMINI_API_URL,
+  "https://raymondymmak-mindlink.expo.app/api/gemini"
+);
 assert.ok(DEFAULT_GEMINI_API_URL.includes("/api/gemini"));
 assert.ok(!DEFAULT_GEMINI_API_URL.includes("EXPO_PUBLIC_GEMINI_API_KEY"));
 

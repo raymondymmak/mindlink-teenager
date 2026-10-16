@@ -10,6 +10,10 @@ import {
   withClinicalContext,
 } from "../utils/contextApi.js";
 
+assert.strictEqual(
+  DEFAULT_CONTEXT_API_URL,
+  "https://raymondymmak-mindlink.expo.app/api/context"
+);
 assert.ok(DEFAULT_CONTEXT_API_URL.includes("/api/context"));
 assert.ok(!DEFAULT_CONTEXT_API_URL.includes("PINECONE"));
 
