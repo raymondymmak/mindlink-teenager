@@ -3,7 +3,7 @@ import { mindLinkApiHeaders } from "./apiAuth.js";
 
 export const SAME_ORIGIN_GEMINI_PATH = "/api/gemini";
 export const PRODUCTION_GEMINI_API_URL =
-  "https://raymondmak-app1.expo.app/api/gemini";
+  "https://raymondymmak-mindlink.expo.app/api/gemini";
 export const DEFAULT_GEMINI_API_URL = PRODUCTION_GEMINI_API_URL;
 
 export const GEMINI_LITE_MODEL = "gemini-3.5-flash-lite";

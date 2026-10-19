@@ -4,8 +4,8 @@
 
 Open PRs against **`main` only**. GitHub Actions deploys:
 
-- PRs → EAS Hosting **staging** (`https://raymondmak-app1--staging.expo.app/`)
-- merge/push to `main` → **production** (`https://raymondmak-app1.expo.app/`)
+- PRs → EAS Hosting **staging** (`https://raymondymmak-mindlink--staging.expo.app/`)
+- merge/push to `main` → **production** (`https://raymondymmak-mindlink.expo.app/`)
 
 Do **not** run `eas deploy --prod`. Do **not** run `eas deploy` unless you are debugging CI (staging only). Full rules and required secrets (`EXPO_TOKEN`, EAS `GEMINI_KEY` / `PINECONE_KEY` / `MINDLINK_API_TOKEN`): [DEPLOY.md](./DEPLOY.md).
 
